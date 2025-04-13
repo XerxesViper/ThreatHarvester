@@ -1,5 +1,6 @@
 import argparse
 from src.db_manager import query_ioc
+from src.utils import detect_ioc_type
 
 
 def main():
@@ -16,12 +17,16 @@ def main():
     )
 
     args = parser.parse_args()
-    print(f"Arguments received: {args}")
+    # print(f"Arguments received: {args}")
 
     if args.ioc:
         indicator_to_query = args.ioc
-        print(f"[*] Querying local database for: {indicator_to_query}")
+        print(f"[*] Received IOC: {indicator_to_query}")
 
+        ioc_type = detect_ioc_type(indicator_to_query)
+        print(f"[*] Detected IOC Type: {ioc_type}")
+
+        print(f"[*] Querying local database for: {indicator_to_query}")
         local_results = query_ioc(indicator_to_query)
 
         if local_results:
