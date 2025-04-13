@@ -21,7 +21,7 @@ def add_ioc(db_path, ioc_value, ioc_type, sources, feed_url=None, first_seen_fee
         connection.commit()
 
         if cursor.rowcount > 0:
-            print(f"New IOC added to database: {ioc_value} ({ioc_type})")
+            print(f"New IOC added to database: {ioc_value} ({ioc_type}) - Debuglevel: 1")
 
     except sqlite3.Error as e:
         print(f"Error adding IOC to database [add_ioc]: {e}")
