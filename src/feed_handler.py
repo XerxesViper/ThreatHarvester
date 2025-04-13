@@ -149,6 +149,7 @@ def process_malware_bazaar_feed(feed_content, db_path=config.DATABASE_PATH, sour
             first_seen = clean_value(row.get('first_seen_utc', None))
             first_seen = row.get('first_seen_utc', None)
             sha256 = clean_value(row.get('sha256_hash', None))
+            sha1 = clean_value(row.get('sha1_hash', None))
             md5 = clean_value(row.get('md5_hash', None))
 
             signature = clean_value(row.get('signature', None))
@@ -192,6 +193,20 @@ def process_malware_bazaar_feed(feed_content, db_path=config.DATABASE_PATH, sour
                     tags=final_tags_for_db
                 )
                 processed_hashes += 1
+
+            # Adding SHA1 hash if present
+            if sha1:
+                add_ioc(
+                    db_path=db_path,
+                    ioc_value=sha1,
+                    ioc_type='sha1',
+                    sources=source_name,
+                    feed_url=feed_url,
+                    first_seen_feed=first_seen,
+                    tags=final_tags_for_db
+                )
+                processed_hashes += 1
+
 
             # Adding md5 checksum if present
             if md5:
