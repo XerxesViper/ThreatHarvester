@@ -3,15 +3,19 @@ import io
 import csv
 import requests
 from tqdm import tqdm
-from db_manager import add_ioc
 
-FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt"
+# Local Imports
+import config
+from db_manager import add_ioc
 
 
 def fetch_feed_content(url, timeout=30):
     """ Fetches the contents of a feed from a given URL. """
+
+    user_agent = getattr(config, "USER_AGENT", 'ThreatIntelTool/0.1-TEST')
+
     try:
-        response = requests.get(url, timeout=timeout, headers={'User-Agent': 'ThreatIntelTool/0.1'})
+        response = requests.get(url, timeout=timeout, headers={'User-Agent': user_agent})
         response.raise_for_status()
         print(f"Feed contents fetched successfully from {url}")
         return response.text
@@ -65,11 +69,7 @@ def process_feodo_tracker_feed(feed_content, db_path, source_name="FeodoTrackerI
     return processed_count
 
 
-DEFAULT_DB_PATH = "data/threat_intel.db"  # Adjusted path relative to src/
-DEFAULT_FEODO_URL = FEODO_URL
-
-
-def update_feodo_tracker(db_path=DEFAULT_DB_PATH, url=DEFAULT_FEODO_URL):
+def update_feodo_tracker(db_path=config.DATABASE_PATH, url=config.FEODO_TRACKER_URL):
     """Fetches and processes the Feodo Tracker IP blocklist."""
     print(f"Starting update for Feodo Tracker from {url}...")
 
@@ -89,8 +89,6 @@ def update_feodo_tracker(db_path=DEFAULT_DB_PATH, url=DEFAULT_FEODO_URL):
         print("Failed to fetch Feodo Tracker feed - skipping processing.")
 
 
-MALWARE_BAZAAR_URL_RECENT_CSV = "https://bazaar.abuse.ch/export/csv/recent/"
-
 MALWARE_BAZAAR_HEADERS = [
     "first_seen_utc", "sha256_hash", "md5_hash", "sha1_hash", "reporter",
     "file_name", "file_type_guess", "mime_type", "signature", "clamav",
@@ -107,7 +105,7 @@ def clean_value(value):
     return value.strip().strip('"')
 
 
-def process_malware_bazaar_feed(feed_content, db_path, source_name="MalwareBazaarRecent", feed_url=None):
+def process_malware_bazaar_feed(feed_content, db_path=config.DATABASE_PATH, source_name="MalwareBazaarRecent", feed_url=config.MALWARE_BAZAAR_URL):
     """Parses Malware Bazaar CSV feed and adds IOCs (MD5, SHA256) to the DB."""
     if not feed_content:
         print(f"No content received for {source_name}, skipping processing.")
@@ -218,7 +216,7 @@ def process_malware_bazaar_feed(feed_content, db_path, source_name="MalwareBazaa
     return processed_hashes
 
 
-def update_malware_bazaar(db_path=DEFAULT_DB_PATH, url=MALWARE_BAZAAR_URL_RECENT_CSV):
+def update_malware_bazaar(db_path=config.DATABASE_PATH, url=config.MALWARE_BAZAAR_URL):
     """Fetches and processes the Malware Bazaar recent CSV feed."""
 
     print(f"Starting update for Malware Bazaar from {url}...")
@@ -239,18 +237,16 @@ def update_malware_bazaar(db_path=DEFAULT_DB_PATH, url=MALWARE_BAZAAR_URL_RECENT
 
 
 if __name__ == "__main__":
-    # Configure basic logging for testing if desired
-    # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    db_path_run = "data/threat_intel.db"  # Assuming run from project root
+    db_path_run = config.DATABASE_PATH
 
     # --- Test Feodo Tracker ---
-    print(f"Running Feodo Tracker update directly. DB path: {db_path_run}")
+    print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
     update_feodo_tracker(db_path=db_path_run)
     print("-" * 20)  # Separator
 
     # --- Test Malware Bazaar ---
-    print(f"Running Malware Bazaar update directly. DB path: {db_path_run}")
+    print(f"Running Malware Bazaar update directly. DB path: {config.DATABASE_PATH}")
     update_malware_bazaar(db_path=db_path_run)
     print("-" * 20)  # Separator
 
