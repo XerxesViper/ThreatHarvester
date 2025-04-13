@@ -1,5 +1,6 @@
 import sqlite3
 import datetime
+from . import config
 
 
 def add_ioc(db_path, ioc_value, ioc_type, sources, feed_url=None, first_seen_feed=None, tags=None):
@@ -29,3 +30,31 @@ def add_ioc(db_path, ioc_value, ioc_type, sources, feed_url=None, first_seen_fee
     finally:
         if connection:
             connection.close()
+
+
+def query_ioc(ioc_value):
+    """Queries the local DB for an IOC value."""
+
+    results = []
+    connection = None
+    try:
+        connection = sqlite3.connect(config.DATABASE_PATH)
+        cursor = connection.cursor()
+
+        sql = "SELECT * FROM iocs WHERE ioc_value = ?"
+        cursor.execute(sql, (ioc_value,))  # Pass value as a tuple
+
+        rows = cursor.fetchall()  # Returns a list of sqlite3.row objects
+
+        results = rows
+
+        print(f"Found {len(results)} local record(s) for IOC: {ioc_value}")
+
+    except sqlite3.Error as e:
+        print(f"Error querying database for {ioc_value}: {e}")
+
+    finally:
+        if connection:
+            connection.close()
+
+    return results

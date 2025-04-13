@@ -5,8 +5,8 @@ import requests
 from tqdm import tqdm
 
 # Local Imports
-import config
-from db_manager import add_ioc
+from . import config
+from .db_manager import add_ioc
 
 
 def fetch_feed_content(url, timeout=30):
