@@ -85,6 +85,8 @@ def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIP
         else:
             print("[-] No AbuseIPDB data available.")  # Fallback
 
+    else:
+        print("[-] AbuseIPDB lookup ignored because input is not IPv4")
     print("\n" + "=" * 40)
 
 
