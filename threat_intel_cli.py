@@ -75,7 +75,7 @@ def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIP
             print(f"[+] Total Reports: {abuseipdb_results.get('abuseipdb_reports', 'N/A')}")
             print(f"[+] Last Reported: {abuseipdb_results.get('abuseipdb_last_reported', 'N/A')}")
 
-        # *** Use the passed flag to explain missing data ***
+        # *** Use the passed flag to explain missing data ***``
         elif arg_AIPDB_disabled:
             print("[!] AbuseIPDB lookup skipped (disabled by user flag --no_AIPDB).")
         elif abuseipdb_results is None and config.ABUSEIPDB_API_KEY:  # Check API key exists
@@ -94,17 +94,21 @@ def main():
     parser = argparse.ArgumentParser(
         description="Threat Intel Feed Correlator & Enrichment Tool"
     )
-    # ... parser arguments for --ioc, --no_VT, --no_AIPDB using action='store_true' ...
+
     parser.add_argument(
-        '-i', "--ioc", type=str, required=True,
+        '-i', "--ioc",
+        type=str,
+        required=True,
         help="Indicator of Compromise to query (IP, domain, hash, URL)"
     )
     parser.add_argument(
-        '--no_VT', action='store_true',
+        '--no_VT',
+        action='store_true',
         help="Disable VirusTotal enrichment"
     )
     parser.add_argument(
-        '--no_AIPDB', action='store_true',
+        '--no_AIPDB',
+        action='store_true',
         help="Disable AbuseIPDB enrichment"
     )
 
@@ -157,12 +161,10 @@ def main():
 
     print("[*] Enrichment finished.")
 
-    # --- Display Results (Single Call) ---
     display_results(
         ioc_value=indicator_to_query,
         ioc_type=ioc_type,
         local_results=local_results,
-        # Pass the boolean flags themselves
         arg_VT_disabled=args.no_VT,
         arg_AIPDB_disabled=args.no_AIPDB,
         vt_results=vt_data,
