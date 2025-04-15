@@ -23,6 +23,8 @@ FEODO_TRACKER_URL = os.getenv("FEODO_TRACKER_URL", DEFAULT_FEODO_URL)
 DEFAULT_MALWARE_BAZAAR_URL = "https://bazaar.abuse.ch/export/csv/recent/"
 MALWARE_BAZAAR_URL = os.getenv("MALWARE_BAZAAR_URL", DEFAULT_MALWARE_BAZAAR_URL)
 
+DEFAULT_URLHAUS_URL = "https://urlhaus.abuse.ch/downloads/csv_recent/"
+URLHAUS_URL = os.getenv("URLHAUS_URL", DEFAULT_URLHAUS_URL)
+
 DEFAULT_USER_AGENT = "ThreatIntelTool/0.1"
 USER_AGENT = os.getenv("USER_AGENT", DEFAULT_USER_AGENT)
-

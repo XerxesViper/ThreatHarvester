@@ -25,6 +25,12 @@ def fetch_feed_content(url, timeout=30):
         return None
 
 
+"""
+===========================================================
+Feodo Tracker feed functions
+===========================================================
+"""
+
 # Basic IPv4 regex matching pattern
 IP_PATTERN = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
 
@@ -88,6 +94,12 @@ def update_feodo_tracker(db_path=config.DATABASE_PATH, url=config.FEODO_TRACKER_
     else:
         print("Failed to fetch Feodo Tracker feed - skipping processing.")
 
+
+"""
+===========================================================
+Malware Bazaar feed functions
+===========================================================
+"""
 
 MALWARE_BAZAAR_HEADERS = [
     "first_seen_utc", "sha256_hash", "md5_hash", "sha1_hash", "reporter",
@@ -161,19 +173,19 @@ def process_malware_bazaar_feed(feed_content, db_path=config.DATABASE_PATH, sour
 
             # Add Signature
             if signature and signature.lower() not in ["", "n/a"]:
-                db_tags_list.append(f"signature:{signature}")
+                db_tags_list.append(f"signature: {signature}")
 
             # Add file type
             if file_type and file_type.lower() not in ["", "n/a"]:
-                db_tags_list.append(f"file_type:{file_type}")
+                db_tags_list.append(f"file_type: {file_type}")
 
             # Add mime type
             if mime_type and mime_type.lower() not in ["", "n/a"]:
-                db_tags_list.append(f"mime:{mime_type}")
+                db_tags_list.append(f"mime: {mime_type}")
 
             # Optional: Add filename if present and meaningful
             if file_name and file_name.lower() not in ["", "n/a"]:
-                db_tags_list.append(f"filename:{file_name}")
+                db_tags_list.append(f"filename: {file_name}")
 
             # Combining all tags into one for db addition
             final_tags_for_db = ",".join(db_tags_list) if db_tags_list else None
@@ -206,7 +218,6 @@ def process_malware_bazaar_feed(feed_content, db_path=config.DATABASE_PATH, sour
                     tags=final_tags_for_db
                 )
                 processed_hashes += 1
-
 
             # Adding md5 checksum if present
             if md5:
@@ -251,18 +262,111 @@ def update_malware_bazaar(db_path=config.DATABASE_PATH, url=config.MALWARE_BAZAA
         print("Failed to fetch Malware Bazaar feed - skipping processing.")
 
 
+"""
+===========================================================
+URLHaus feed functions
+===========================================================
+"""
+
+URLHAUS_HEADERS = [
+    "id", "dateadded", "url", "url_status", "last_online",
+    "threat", "tags", "urlhaus_link", "reporter"
+]
+URLHAUS_SOURCE_NAME = "URLhausRecent"
+
+
+def process_urlhaus_feed(feed_content, db_path, source_name=URLHAUS_SOURCE_NAME, feed_url=None):
+    """Parses URLhaus recent CSV feed and adds URL IOCs to the DB."""
+    if not feed_content:
+        print(f"No content received for {source_name}, skipping processing.")
+        return 0
+
+    processed_urls = 0
+    csv_file = io.StringIO(feed_content)
+
+    data_line_iterable = (line for line in csv_file if not line.startswith('#'))
+
+    reader = csv.DictReader(data_line_iterable, fieldnames=URLHAUS_HEADERS, delimiter=',')
+
+    print(f"Processing {source_name} feed...")
+
+    try:
+        for row in reader:
+            url_value = clean_value(row.get('url', None))
+            date_added = clean_value(row.get('dateadded', None))
+            threat_type = clean_value(row.get('threat', None))
+            feed_tags = clean_value(row.get('tags', None))
+            urlhaus_link = clean_value(row.get('urlhaus_link', None))
+
+            if not url_value:
+                continue
+
+            db_tags_list = []
+            if threat_type and threat_type.lower() != "n/a":
+                db_tags_list.append(f"threat: {threat_type}")
+
+            if feed_tags and feed_tags.lower() != "n/a":
+                for tag in feed_tags.split():
+                    db_tags_list.append(f"tag: {tag}")
+
+            if urlhaus_link and urlhaus_link.lower() != "n/a":
+                db_tags_list.append(f"urlhaus_link- {urlhaus_link}")
+
+            final_tags_for_db = ",".join(db_tags_list) if db_tags_list else None
+
+            add_ioc(
+                db_path=db_path,
+                ioc_value=url_value,
+                ioc_type='url',
+                sources=source_name,
+                feed_url=feed_url,
+                first_seen_feed=date_added,
+                tags=final_tags_for_db
+            )
+
+            processed_urls += 1
+
+    except csv.Error as e:
+        print(f"\nCSV DictReader error in {source_name}: {e}")
+        return processed_urls
+
+    except ValueError as e:
+        print(f"\nAn unexpected error occurred processing {source_name} row: {e}")
+        return processed_urls
+
+    print(f"\nFinished processing {source_name}. Processed {processed_urls} URLs.")
+    return processed_urls
+
+
+def update_urlhaus(db_path=config.DATABASE_PATH, url=config.URLHAUS_URL):
+    """Fetches and processes the URLhaus recent CSV feed."""
+    print(f"Starting update for URLhaus from {url}...")
+
+    feed_content = fetch_feed_content(url)
+    if feed_content:
+        print(f"Successfully fetched URLhaus feed ({len(feed_content)} bytes). Processing...")
+        processed_count = process_urlhaus_feed(
+            feed_content=feed_content,
+            db_path=db_path,
+            source_name=URLHAUS_SOURCE_NAME,
+            feed_url=url
+        )
+
+    else:
+        print("Failed to fetch URLhaus feed")
+
+
 if __name__ == "__main__":
-
-    db_path_run = config.DATABASE_PATH
-
-    # --- Test Feodo Tracker ---
     print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
-    update_feodo_tracker(db_path=db_path_run)
-    print("-" * 20)  # Separator
+    update_feodo_tracker()
+    print("-" * 20)
 
-    # --- Test Malware Bazaar ---
     print(f"Running Malware Bazaar update directly. DB path: {config.DATABASE_PATH}")
-    update_malware_bazaar(db_path=db_path_run)
-    print("-" * 20)  # Separator
+    update_malware_bazaar()
+    print("-" * 20)
+
+    print(f"Running URLhaus update directly. DB path: {config.DATABASE_PATH}")
+    update_urlhaus()
+    print("-" * 20)
 
     print("Feed handler testing finished.")
