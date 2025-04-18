@@ -2,7 +2,16 @@ import re
 import io
 import csv
 import requests
+import datetime
 from tqdm import tqdm
+
+try:
+    from OTXv2 import OTXv2
+
+    OTX_SDK_AVAILABLE = True
+except ImportError:
+    print("[Warning] OTXv2 SDK not installed. OTX feed processing will be skipped.")
+    OTX_SDK_AVAILABLE = False
 
 # Local Imports
 from . import config
@@ -356,17 +365,157 @@ def update_urlhaus(db_path=config.DATABASE_PATH, url=config.URLHAUS_URL):
         print("Failed to fetch URLhaus feed")
 
 
+"""
+===========================================================
+OTX - AlienVault Pulse feed function
+
+- AlienVault can be used both as a feed source (pulling lists of IOCs from "pulses") 
+and an enrichment source (looking up a specific IOC).
+===========================================================
+"""
+
+# Mapping from OTX indicator types to our internal types
+OTX_TYPE_MAP = {
+    "IPv4": "ipv4",
+    "IPv6": "ipv6",
+    "domain": "domain",
+    "hostname": "domain",  # Treat hostname like domain
+    "URL": "url",
+    "FileHash-MD5": "md5",
+    "FileHash-SHA1": "sha1",
+    "FileHash-SHA256": "sha256",
+    # Add more mappings as needed (e.g., CVE, email) later
+}
+
+OTX_SOURCE_NAME = "AlienVaultOTX"
+
+
+def update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY):
+    """Fetches recent pulses from AlienVault OTX and adds IOCs."""
+
+    if not OTX_SDK_AVAILABLE:
+        print("[!] Skipping OTX feed update: OTXv2 SDK not installed.")
+        return 0
+
+    if not api_key:
+        print("[!] Skipping OTX feed update: OTX_API_KEY not configured.")
+        return 0
+
+    print(f"Starting update for {OTX_SOURCE_NAME}...")
+
+    try:
+        otx = OTXv2(api_key=api_key, user_agent=config.USER_AGENT)
+        print(f"[*] Successfully connected to OTX API.")
+    except Exception as e:
+        print(f"[!] Failed to instantiate OTX client: {e}")
+        return 0
+
+    processed_iocs_count = 0
+    pulses = []
+
+    try:
+        print("[*] Fetching recent pulses from OTX using getall()...")
+
+        # --- Calculate 'modified_since' timestamp ---
+        since_timestamp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=100)
+
+        print(f"[*] Fetching pulses modified since: {since_timestamp.strftime('%Y-%m-%d %H:%M:%S')}...")
+
+        pulses = otx.getall(modified_since=since_timestamp.isoformat())  # Format for OTX API (ISO 8601 format)
+        print(f"[*] Found {len(pulses)} pulses to process.")
+
+    except Exception as e:
+        print(f"[!] Error fetching pulses from OTX: {e}")
+        return 0
+
+    pbar = tqdm(pulses, total=len(pulses), desc=f"Processing {OTX_SOURCE_NAME}", unit="entries")
+    for pulse in pbar:
+        pulse_id_for_error = "UNKNOWN_ID"  # Default for error messages
+        try:
+            # --- Extract Pulse Context and Build Base Tags ---
+            # Use .get() as pulse is likely a dictionary from the SDK's JSON parsing
+            pulse_id = pulse.get('id')
+            pulse_id_for_error = pulse_id if pulse_id else "UNKNOWN_ID"  # Update for specific error context
+            pulse_name = pulse.get('name', 'N/A')
+            pulse_modified = pulse.get('modified')
+            pulse_adversary = pulse.get('adversary')
+            pulse_tags_list = pulse.get('tags', [])  # OTX tags
+            pulse_malware = pulse.get('malware_families', [])
+            pulse_attack_ids = pulse.get('attack_ids', [])
+            pulse_ref_url = f"https://otx.alienvault.com/pulse/{pulse_id}" if pulse_id else None
+
+            # Prepare base tags list (formatted tags from pulse context)
+            base_tags = []
+            if pulse_name != 'N/A': base_tags.append(f"pulse_name:{pulse_name}")
+            if pulse_adversary: base_tags.append(f"adversary:{pulse_adversary}")
+            base_tags.extend([f"pulse_tag:{tag}" for tag in pulse_tags_list])
+            base_tags.extend([f"malware:{fam}" for fam in pulse_malware])
+            base_tags.extend([f"attack:{att_id}" for att_id in pulse_attack_ids])
+            # --- End Base Tag Preparation ---
+
+            indicators = pulse.get('indicators', [])
+            if not indicators:
+                continue  # Skip pulse if it has no indicators
+
+            # --- Inner loop for indicators ---
+            for indicator in indicators:
+                ioc_value = indicator.get('indicator')
+                otx_type_str = indicator.get('type')
+                indicator_role = indicator.get('role')
+
+                if not ioc_value or not otx_type_str:
+                    continue  # Skip indicator if essential info missing
+
+                # Map OTX type string to our internal type
+                ioc_type = OTX_TYPE_MAP.get(otx_type_str)
+                if not ioc_type:
+                    continue  # Skip unsupported types
+
+                # Build tags for this specific indicator
+                current_indicator_tags = base_tags.copy()  # Start with base tags
+                if indicator_role:
+                    current_indicator_tags.append(f"role:{indicator_role}")
+                final_tags_for_db = ",".join(current_indicator_tags)
+
+                # Use pulse modified time as first_seen_feed
+                first_seen = pulse_modified
+
+                # Add the IOC to the database
+                add_ioc(
+                    db_path=db_path,
+                    ioc_value=ioc_value,
+                    ioc_type=ioc_type,
+                    sources=OTX_SOURCE_NAME,
+                    feed_url=pulse_ref_url,
+                    first_seen_feed=first_seen,
+                    tags=final_tags_for_db
+                )
+                processed_iocs_count += 1
+
+        except Exception as e:
+            # Catch errors during processing of a single pulse
+            pbar.write(f"[!] Error processing pulse ID {pulse_id_for_error}: {e}")
+
+    pbar.close()  # Close tqdm progress bar
+    print(f"[*] Finished processing {OTX_SOURCE_NAME}. Added/updated approx {processed_iocs_count} IOCs.")  # Note: count includes updates/ignores
+    return processed_iocs_count
+
+
 if __name__ == "__main__":
-    print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
-    update_feodo_tracker()
-    print("-" * 20)
+    # print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
+    # update_feodo_tracker()
+    # print("-" * 20)
+    #
+    # print(f"Running Malware Bazaar update directly. DB path: {config.DATABASE_PATH}")
+    # update_malware_bazaar()
+    # print("-" * 20)
+    #
+    # print(f"Running URLhaus update directly. DB path: {config.DATABASE_PATH}")
+    # update_urlhaus()
+    # print("-" * 20)
 
-    print(f"Running Malware Bazaar update directly. DB path: {config.DATABASE_PATH}")
-    update_malware_bazaar()
-    print("-" * 20)
-
-    print(f"Running URLhaus update directly. DB path: {config.DATABASE_PATH}")
-    update_urlhaus()
+    print(f"Running OTX update directly. DB path: {config.DATABASE_PATH}")
+    update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY)
     print("-" * 20)
 
     print("Feed handler testing finished.")

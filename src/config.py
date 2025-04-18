@@ -11,6 +11,7 @@ load_dotenv(dotenv_path=dotenv_path)
 VT_API_KEY = os.getenv("VT_API_KEY", None)
 ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", None)
 SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", None)
+OTX_API_KEY = os.getenv("OTX_API_KEY", None)
 
 # --- Database Path ---
 DEFAULT_DB_PATH = "data/threat_intel.db"
@@ -26,5 +27,5 @@ MALWARE_BAZAAR_URL = os.getenv("MALWARE_BAZAAR_URL", DEFAULT_MALWARE_BAZAAR_URL)
 DEFAULT_URLHAUS_URL = "https://urlhaus.abuse.ch/downloads/csv_recent/"
 URLHAUS_URL = os.getenv("URLHAUS_URL", DEFAULT_URLHAUS_URL)
 
-DEFAULT_USER_AGENT = "ThreatIntelTool/0.1"
+DEFAULT_USER_AGENT = "ThreatIntelTool/0.2"
 USER_AGENT = os.getenv("USER_AGENT", DEFAULT_USER_AGENT)
