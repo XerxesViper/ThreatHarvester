@@ -7,7 +7,7 @@ from src import config
 from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb, enrich_otx
 
 
-def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled,
+def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled, arg_OTX_disabled,
                     vt_results=None, abuseipdb_results=None, otx_results=None):
     """Formats and prints the collected results."""
 
@@ -123,6 +123,8 @@ def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIP
         elif pulse_count > 0:  # If count > 0 but no details extracted
             print(f"[+] Related Pulse IDs (Sample): {', '.join(related_ids)}")
 
+    elif arg_OTX_disabled:
+        print("[!] AlienVault OTX lookup skipped (disabled by user flag --no_OTX).")
     elif otx_results is None and config.OTX_API_KEY:
         print("[-] IOC not found in OTX or an error occurred during lookup.")
     elif not config.OTX_API_KEY:
@@ -145,16 +147,20 @@ def main():
         help="Indicator of Compromise to query (IP, domain, hash, URL)"
     )
     parser.add_argument(
-        '--no_VT',
+        '-nvt', '--no_VT',
         action='store_true',
         help="Disable VirusTotal enrichment"
     )
     parser.add_argument(
-        '--no_AIPDB',
+        '-naipdb', '-nipdb', '--no_AIPDB',
         action='store_true',
         help="Disable AbuseIPDB enrichment"
     )
-
+    parser.add_argument(
+        '-notx', '--no_OTX',
+        action='store_true',
+        help="Disable AlienVault OTX enrichment"
+    )
     args = parser.parse_args()
 
     # --- Assume --ioc is present due to required=True ---
@@ -205,7 +211,7 @@ def main():
             print("[!] --no_AIPDB flag ignored (IOC is not an IP)")
             print("\n" + "=" * 20)
 
-        if otx_api_key:
+        if otx_api_key and not args.no_OTX:
             print("[*] Querying AlienVault OTX...")
             otx_data = enrich_otx(indicator_to_query, ioc_type, otx_api_key)
         else:
@@ -214,13 +220,15 @@ def main():
         print("[*] Enrichment finished.")
 
     print("[*] Enrichment finished.")
-
     display_results(
         ioc_value=indicator_to_query,
         ioc_type=ioc_type,
+
         local_results=local_results,
         arg_VT_disabled=args.no_VT,
         arg_AIPDB_disabled=args.no_AIPDB,
+        arg_OTX_disabled=args.no_OTX,
+
         vt_results=vt_data,
         abuseipdb_results=abuseipdb_data,
         otx_results=otx_data,
