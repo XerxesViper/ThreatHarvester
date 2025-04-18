@@ -1,12 +1,14 @@
 import argparse
+import pprint
 from src.db_manager import query_ioc
 from src.utils import detect_ioc_type
 
 from src import config
-from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb
+from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb, enrich_otx
 
 
-def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled, vt_results=None, abuseipdb_results=None):
+def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled,
+                    vt_results=None, abuseipdb_results=None, otx_results=None):
     """Formats and prints the collected results."""
 
     print("\n" + "=" * 40)
@@ -86,7 +88,48 @@ def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIP
             print("[-] No AbuseIPDB data available.")  # Fallback
 
     else:
+        print("\n")
         print("[-] AbuseIPDB lookup ignored because input is not IPv4")
+    print("\n" + "=" * 40)
+
+    # --- AlienVault OTX Enrichment ---
+    print("\n--- AlienVault OTX Enrichment ---")
+
+    if otx_results:
+        pulse_count = otx_results.get('otx_pulse_count', 0)
+        related_ids = otx_results.get('otx_related_pulse_ids', [])
+        print(f"[+] OTX Type Title: {otx_results.get('otx_type_title', 'N/A')}")
+
+        # Print base indicator info if available
+        base_ind = otx_results.get('otx_base_indicator')
+        base_type = otx_results.get('otx_base_indicator_type')
+        if base_ind and base_type:
+            print(f"[+] Base Indicator: {base_ind} ({base_type})")
+
+        print(f"[+] Related Pulse Count: {pulse_count}")
+
+        # Print details of related pulses
+        pulse_details = otx_results.get('otx_related_pulse_details', [])
+        if pulse_details:
+            print("[+] Related Pulse Details (Sample):")
+            for detail in pulse_details:
+                print(f"  - Pulse ID: {detail.get('id', 'N/A')}")
+                print(f"    Name: {detail.get('name', 'N/A')}")
+                adversary = detail.get('adversary')
+                print(f"    Adversary: {adversary}") if adversary else None
+                malware = detail.get('malware_families', [])
+                print(f"    Malware Families: {', '.join(malware)}") if malware else None
+                print("    ---")  # Separator for pulse details
+        elif pulse_count > 0:  # If count > 0 but no details extracted
+            print(f"[+] Related Pulse IDs (Sample): {', '.join(related_ids)}")
+
+    elif otx_results is None and config.OTX_API_KEY:
+        print("[-] IOC not found in OTX or an error occurred during lookup.")
+    elif not config.OTX_API_KEY:
+        print("[!] OTX lookup skipped (API key not configured).")
+    else:
+        print("[-] No OTX data available.")
+
     print("\n" + "=" * 40)
 
 
@@ -129,8 +172,10 @@ def main():
     print(f"[*] Starting external enrichment...")
     vt_data = None
     abuseipdb_data = None
+    otx_data = None
     vt_api_key = config.VT_API_KEY
     abuseipdb_api_key = config.ABUSEIPDB_API_KEY
+    otx_api_key = config.OTX_API_KEY
 
     if ioc_type == 'unknown':
         print("[!] Cannot perform enrichment on 'unknown' IOC type.")
@@ -155,9 +200,18 @@ def main():
                     print("[!] Skipping AbuseIPDB (API key missing)")
             else:
                 print("[!] Skipping AbuseIPDB (disabled by user flag --no_AIPDB)")
-        # Optional: Notify user if --no_AIPDB flag is set for non-IP IOC
         elif args.no_AIPDB:
+            print("\n" + "=" * 20)
             print("[!] --no_AIPDB flag ignored (IOC is not an IP)")
+            print("\n" + "=" * 20)
+
+        if otx_api_key:
+            print("[*] Querying AlienVault OTX...")
+            otx_data = enrich_otx(indicator_to_query, ioc_type, otx_api_key)
+        else:
+            print("[!] Skipping OTX (API key missing)")
+
+        print("[*] Enrichment finished.")
 
     print("[*] Enrichment finished.")
 
@@ -168,7 +222,8 @@ def main():
         arg_VT_disabled=args.no_VT,
         arg_AIPDB_disabled=args.no_AIPDB,
         vt_results=vt_data,
-        abuseipdb_results=abuseipdb_data
+        abuseipdb_results=abuseipdb_data,
+        otx_results=otx_data,
     )
 
 

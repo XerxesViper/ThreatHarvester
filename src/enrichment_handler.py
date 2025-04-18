@@ -1,11 +1,36 @@
 import time
 import base64
 import requests
+from OTXv2 import OTXv2
 
 from . import config
+from .feed_handler import OTX_SDK_AVAILABLE
 
 VT_BASE_URL = "https://www.virustotal.com/api/v3"
 ABUSEIPDB_BASE_URL = "https://api.abuseipdb.com/api/v2/check"
+OTX_API_BASE_URL = "https://otx.alienvault.com"
+
+# --- Type Mapping for OTX API Calls ---
+OTX_API_PATH_TYPE_MAP = {
+    "ipv4": "ip",
+    # "ipv6": "ip",     # Assuming IPv6 might also use 'ip', needs testing if IPv6 is added
+    "domain": "domain",
+    "hostname": "hostname",  # Keep as hostname (OTX differentiates)
+    "url": "url",
+    "md5": "file",
+    "sha1": "file",
+    "sha256": "file",
+}
+INTERNAL_TYPE_TO_OTX_MAP = {
+    "ipv4": "IPv4",
+    "ipv6": "IPv6",
+    "domain": "domain",
+    # "hostname": "hostname",  # SDK might just use 'domain' or handle internally
+    "url": "URL",
+    "md5": "FileHash-MD5",
+    "sha1": "FileHash-SHA1",
+    "sha256": "FileHash-SHA256",
+}
 
 
 def enrich_virustotal(ioc_value, ioc_type, api_key):
@@ -82,7 +107,6 @@ def enrich_virustotal(ioc_value, ioc_type, api_key):
                 extracted_data['vt_names'] = attributes.get('names')
                 extracted_data['vt_type_tags'] = attributes.get('type_tags')
                 extracted_data['vt_size'] = attributes.get('size')
-            # Add URL specific extraction if needed
 
             return extracted_data
 
@@ -192,4 +216,122 @@ def enrich_abuseipdb(ip_address, api_key, max_age_days=90):
         return None
     except Exception as e:  # Catch potential JSON parsing errors etc.
         print(f"AbuseIPDB: Error processing response for {ip_address}: {e}")
+        return None
+
+
+def enrich_otx(ioc_value, ioc_type, api_key):
+    """
+        Enriches an IOC using the AlienVault OTX API v2.
+
+        Args:
+            ioc_value (str): The indicator value.
+            ioc_type (str): Our internal indicator type.
+            api_key (str): The OTX API key.
+
+        Returns:
+            dict: A dictionary containing extracted OTX data (e.g., pulse info),
+                  or None if an error occurs, not found, or type unsupported.
+
+    """
+
+    if not OTX_SDK_AVAILABLE:
+        print("OTX enrichment skipped: OTX SDK not installed.")
+        return None
+    if not api_key:
+        print("OTX enrichment skipped: API key missing.")
+        return None
+
+    otx_indicator_type = INTERNAL_TYPE_TO_OTX_MAP.get(ioc_type, None)
+    print(otx_indicator_type)
+    if not otx_indicator_type:
+        print(f"OTX enrichment skipped: Unsupported IOC type '{ioc_type}'")
+        return None
+
+    otx_api_path_type = OTX_API_PATH_TYPE_MAP.get(ioc_type)
+    if not otx_api_path_type:  # Check if type is supported for enrichment path
+        print(f"OTX enrichment skipped: Unsupported IOC type for OTX enrichment path '{ioc_type}'")
+        return None
+
+    # --- Direct API Call using requests ---
+    section = 'pulse_info'  # Section we want
+    url = f"{OTX_API_BASE_URL}/api/v1/indicators/{otx_api_path_type}/{ioc_value}/"
+    print(f"OTX API URL: {url}")
+
+    headers = {
+        'X-OTX-API-KEY': api_key,
+        'User-Agent': getattr(config, 'USER_AGENT', 'ThreatIntelTool/0.2'),
+        'Accept': 'application/json'
+    }
+
+    try:
+        print(f"Querying OTX API directly for '{section}' on {otx_indicator_type}: {ioc_value}")
+        response = requests.get(url, headers=headers, timeout=20)
+
+        # --- Process Response ---
+        if response.status_code == 200:
+            print(f"OTX API: Succes`s (200 OK) for {ioc_value}")
+            data = response.json()
+
+            # Extract 'pulse_info' section
+            pulse_info_data = data.get('pulse_info', {})
+            pulses = pulse_info_data.get('pulses', [])
+            pulse_count = pulse_info_data.get('count', 0)
+
+            # --- Extract additional fields ---
+            otx_type_title = data.get('type_title')
+            base_indicator_info = data.get('base_indicator')
+            related_base_indicator = None
+            related_base_type = None
+            if base_indicator_info and isinstance(base_indicator_info, dict):
+                related_base_indicator = base_indicator_info.get('indicator')
+                related_base_type = base_indicator_info.get('type')
+
+            # Extract details from first few pulses (e.g., first 3)
+            related_pulse_details = []
+            for p in pulses[:3]:  # Limit to first 3 pulses
+                pulse_detail = {
+                    "id": p.get('id'),
+                    "name": p.get('name'),
+                    "malware_families": [mf.get('display_name') for mf in p.get('malware_families', []) if mf.get('display_name')],
+                    "adversary": p.get('adversary')
+                }
+                related_pulse_details.append(pulse_detail)
+            # --- End additional field extraction ---
+
+            extracted_data = {
+                'otx_pulse_count': pulse_count,
+                # Keep IDs for potential linking later
+                'otx_related_pulse_ids': [p.get('id') for p in pulses[:5] if p.get('id')],
+                # Add new fields
+                'otx_type_title': otx_type_title,
+                'otx_base_indicator': related_base_indicator,
+                'otx_base_indicator_type': related_base_type,
+                'otx_related_pulse_details': related_pulse_details  # List of dicts
+            }
+            return extracted_data
+
+        elif response.status_code == 404:
+            print(f"OTX API: Indicator not found (404) for {ioc_value}")
+            return None  # Indicate not found
+        elif response.status_code == 403:  # Often used for bad API key
+            print(f"OTX API: Forbidden (403). Check API key permissions.")
+            return None
+        elif response.status_code == 401:  # Sometimes used for bad API key
+            print(f"OTX API: Unauthorized (401). Check API key.")
+            return None
+        elif response.status_code == 429:
+            print(f"OTX API: Rate limit exceeded (429). Try again later.")
+            return None
+        else:
+            print(f"OTX API: Received unexpected status code {response.status_code} for {ioc_value}. Response: {response.text[:200]}")
+            return None
+
+    except requests.exceptions.Timeout:
+        print(f"OTX API: Request timed out for {ioc_value}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"OTX API: Request failed for {ioc_value}: {e}")
+        return None
+    except Exception as e:  # Catch potential JSON parsing errors etc.
+        print(f"OTX API: Error processing response for {ioc_value}: {e}")
         return None
