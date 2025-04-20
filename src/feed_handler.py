@@ -13,6 +13,14 @@ except ImportError:
     print("[Warning] OTXv2 SDK not installed. OTX feed processing will be skipped.")
     OTX_SDK_AVAILABLE = False
 
+try:
+    from pymisp import PyMISP, MISPServerError  # Import PyMISP and common errors
+
+    PYMISP_AVAILABLE = True
+except ImportError:
+    print("[Warning] pymisp library not installed. MISP feed processing will be skipped.")
+    PYMISP_AVAILABLE = False
+
 # Local Imports
 from . import config
 from .db_manager import add_ioc
@@ -501,6 +509,197 @@ def update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY):
     return processed_iocs_count
 
 
+"""
+===========================================================
+MISP feed functions
+
+Multiple feeds are available (30+) for MISP. However the ones used here will
+be the ones available in the official "feed format: misp" format.
+===========================================================
+"""
+MISP_CIRCL_SOURCE_NAME = "MISP-CIRCL-OSINT"
+misp_url = config.MISP_URL
+misp_key = config.MISP_API_KEY
+misp_verifycert = config.MISP_VERIFYCERT
+
+# --- Type Mapping ---
+# We'll need a MISP attribute type map later
+MISP_TYPE_MAP = {
+    "ip-src": "ipv4",
+    "ip-dst": "ipv4",
+    "domain": "domain",
+    "hostname": "domain",
+    "url": "url",
+    "md5": "md5",
+    "sha1": "sha1",
+    "sha256": "sha256",
+    "filename": "filename",  # Example new type
+    "regkey": "regkey",  # Example new type
+    "user-agent": "user-agent",  # Example new type
+    # Add more MISP attribute types as needed
+}
+
+
+
+# def update_misp_feed(
+#         db_path=config.DATABASE_PATH,
+#         misp_url=config.MISP_URL,
+#         misp_key=config.MISP_API_KEY,
+#         verify_cert=config.MISP_VERIFYCERT,
+#         source_name=MISP_CIRCL_SOURCE_NAME,
+#         time_filter_days=1
+# ):
+#     """
+#     Connects to MISP, fetches recent EVENTS via direct API POST,
+#     extracts attributes, and adds them to the local database.
+#     """
+#     # --- Initial Checks ---
+#     if not PYMISP_AVAILABLE: return 0
+#     if not misp_url: return 0
+#     if not misp_key: return 0
+#
+#     print(f"Attempting to connect to MISP instance at {misp_url}...")
+#
+#     # --- Initialize PyMISP Client (Still useful for connection check/auth) ---
+#     misp = None
+#     try:
+#         misp = PyMISP(misp_url, misp_key, verify_cert, 'json')
+#         version_info = misp.misp_instance_version
+#         if not version_info or 'version' not in version_info:
+#             print("[!] Connected, but failed to get MISP version.")
+#             return 0
+#         print(f"[*] Successfully connected! MISP Version: {version_info.get('version')}")
+#     except Exception as e:
+#         print(f"[!] Failed to initialize PyMISP client for {misp_url}: {e}")
+#         return 0
+#
+#         # --- Search for Recent EVENTS via direct_call POST ---
+#     processed_iocs_count = 0
+#     recent_events_response = None
+#     try:
+#         # --- Calculate timestamp ---
+#         time_delta = datetime.timedelta(days=time_filter_days)
+#         since_timestamp = datetime.datetime.now(datetime.timezone.utc) - time_delta
+#         # Use epoch timestamp as string in payload
+#         timestamp_filter = str(int(since_timestamp.timestamp()))
+#
+#         print(f"[*] Searching MISP via POST for events published since timestamp: {timestamp_filter} ({since_timestamp.isoformat()})...")
+#
+#         # --- Define POST payload ---
+#         # Key is likely 'publish_timestamp' for event searching
+#         payload = {
+#             "returnFormat": "json",
+#             "publish_timestamp": timestamp_filter,
+#             # Add other event filters here if needed, e.g., "orgc": "CIRCL"
+#         }
+#
+#         # --- Use direct_call (implicitly POSTs when data is provided) ---
+#         api_path = 'events/restSearch'
+#         recent_events_response = misp.direct_call(api_path, payload)
+#
+#         # --- DEBUG: Inspect the direct_call response ---
+#         print("-" * 20)
+#         print(f"DEBUG: MISP direct_call response type: {type(recent_events_response)}")
+#         print(f"DEBUG: MISP direct_call response data (first 500 chars): {str(recent_events_response)[:500]}")
+#         print("-" * 20)
+#         # --- END DEBUG ---
+#
+#         # --- Extract the list of events ---
+#         # Response structure is often {'response': [list of event dicts]}
+#         if isinstance(recent_events_response, dict):
+#             # Check the 'response' key first
+#             recent_events = recent_events_response.get('response', [])
+#             # If not found, maybe the response itself is the list (less common)
+#             if not recent_events and isinstance(recent_events_response.get('Event'), list):
+#                 recent_events = recent_events_response.get('Event', [])
+#             elif not recent_events:
+#                 # Check if the response contains errors reported by the API
+#                 if 'errors' in recent_events_response:
+#                     print(f"[!] MISP API returned errors: {recent_events_response['errors']}")
+#                 elif 'message' in recent_events_response:  # Another common error format
+#                     print(f"[!] MISP API returned message: {recent_events_response['message']}")
+#                 else:
+#                     print("[!] Could not find event list in MISP response key ('response').")
+#                 recent_events = []  # Ensure it's a list
+#         else:
+#             print(f"[!] MISP direct_call did not return a dictionary. Response: {recent_events_response}")
+#             recent_events = []
+#
+#         print(f"[*] Found {len(recent_events)} recent MISP events to process.")
+#
+#     except MISPServerError as e:
+#         print(f"[!] MISP Server Error during event direct_call: {e}")
+#         return 0
+#     except Exception as e:
+#         print(f"[!] Error during MISP event direct_call or initial parsing: {e}")
+#         return 0
+#
+#         # --- Process Attributes within Events (using dictionaries) ---
+#     if not recent_events:
+#         print("[*] No recent events found matching the criteria.")
+#     else:
+#         pbar_event = tqdm(recent_events, desc=f"Processing {source_name} Events", unit="event", leave=False)
+#         for event_dict in pbar_event:  # Events are now dictionaries
+#             event_id = event_dict.get('id', 'N/A')
+#             pbar_event.set_postfix(event_id=event_id)
+#
+#             # Attributes are likely under the 'Attribute' key within the event dict
+#             attributes_in_event = event_dict.get('Attribute', [])
+#             if not attributes_in_event:
+#                 continue
+#
+#                 # Get event tags (likely under 'Tag' key)
+#             event_tags_list = event_dict.get('Tag', [])
+#
+#             # Inner loop for attributes (which are also dictionaries)
+#             for attribute_dict in attributes_in_event:
+#                 try:
+#                     # Access data using dictionary .get()
+#                     ioc_value = attribute_dict.get('value')
+#                     misp_type = attribute_dict.get('type')
+#                     if not ioc_value or not misp_type: continue
+#
+#                     ioc_type = MISP_TYPE_MAP.get(misp_type)
+#                     if not ioc_type: continue
+#
+#                     attr_timestamp_val = attribute_dict.get('timestamp')
+#                     first_seen = None
+#                     if attr_timestamp_val:
+#                         try:
+#                             ts_epoch = int(float(attr_timestamp_val))
+#                             first_seen = datetime.datetime.fromtimestamp(ts_epoch, tz=datetime.timezone.utc).isoformat()
+#                         except (ValueError, TypeError):
+#                             first_seen = str(attr_timestamp_val)
+#
+#                     # Get attribute tags (likely under 'Tag' key within attribute dict)
+#                     attribute_tags_list = attribute_dict.get('Tag', [])
+#
+#                     current_tags = []
+#                     if event_id != 'N/A': current_tags.append(f"misp_event_id:{event_id}")
+#                     current_tags.extend([f"misp_attr_tag:{tag.get('name')}" for tag in attribute_tags_list if isinstance(tag, dict) and tag.get('name')])
+#                     current_tags.extend([f"misp_event_tag:{tag.get('name')}" for tag in event_tags_list if isinstance(tag, dict) and tag.get('name')])
+#                     current_tags.append(f"misp_type:{misp_type}")
+#                     final_tags_for_db = ",".join(current_tags)
+#
+#                     ref_url = f"{misp_url.rstrip('/')}/events/view/{event_id}" if event_id != 'N/A' and misp_url else None
+#
+#                     add_ioc(
+#                         db_path=db_path, ioc_value=ioc_value, ioc_type=ioc_type,
+#                         sources=source_name, feed_url=ref_url,
+#                         first_seen_feed=first_seen, tags=final_tags_for_db
+#                     )
+#                     processed_iocs_count += 1
+#
+#                 except Exception as e:
+#                     attr_uuid = attribute_dict.get('uuid', 'UNKNOWN_UUID')
+#                     pbar_event.write(f"[!] Error processing MISP attribute UUID {attr_uuid} in event {event_id}: {e}")
+#                     continue
+#         pbar_event.close()
+#
+#     print(f"[*] Finished processing {source_name}. Added/updated approx {processed_iocs_count} IOCs.")
+#     return processed_iocs_count
+
+
 if __name__ == "__main__":
     print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
     update_feodo_tracker()
@@ -518,4 +717,7 @@ if __name__ == "__main__":
     update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY)
     print("-" * 20)
 
+    # print(f"Running MISP update directly. DB path: {config.DATABASE_PATH}")
+    # update_misp_feed(db_path=config.DATABASE_PATH, misp_url=config.MISP_URL, misp_key=config.MISP_API_KEY, verify_cert=config.MISP_VERIFYCERT, source_name="MISP-Instance")
+    # print("-" * 20)
     print("Feed handler testing finished.")

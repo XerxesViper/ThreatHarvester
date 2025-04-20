@@ -13,6 +13,10 @@ ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", None)
 SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", None)
 OTX_API_KEY = os.getenv("OTX_API_KEY", None)
 
+MISP_URL = os.getenv("MISP_URL", None)
+MISP_API_KEY = os.getenv("MISP_API_KEY", None)
+MISP_VERIFYCERT = os.getenv("MISP_VERIFYCERT", "True").lower() == "False"  # Option for self-signed certs
+
 # --- Database Path ---
 DEFAULT_DB_PATH = "data/threat_intel.db"
 DATABASE_PATH = os.getenv("DATABASE_PATH", DEFAULT_DB_PATH)

@@ -3,3 +3,4 @@ sqlite3
 requests
 python-dotenv
 OTXv2 # for AlienVault
+pymisp
