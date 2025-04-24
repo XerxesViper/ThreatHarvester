@@ -1,2 +1,3 @@
-# Threat_Intel_Feed_Correlator
+# Threat Intel Aggregator & Enrichment Tool
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

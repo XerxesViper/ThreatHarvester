@@ -7,8 +7,8 @@ from src import config
 from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb, enrich_otx
 
 
-def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled, arg_OTX_disabled,
-                    vt_results=None, abuseipdb_results=None, otx_results=None):
+def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled, arg_OTX_disabled, arg_MISP_disabled,
+                    vt_results=None, abuseipdb_results=None, otx_results=None, misp_results=None):
     """Formats and prints the collected results."""
 
     print("\n" + "=" * 40)
@@ -132,6 +132,30 @@ def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIP
     else:
         print("[-] No OTX data available.")
 
+    # --- MISP Enrichment ---
+    print("\n--- MISP Enrichment ---")
+    if misp_results:
+        hit_count = misp_results.get('misp_hit_count', 0)
+        event_ids = misp_results.get('misp_event_ids', [])
+        event_infos = misp_results.get('misp_event_infos', {})
+
+        print(f"[+] Found {hit_count} matching attribute(s) in MISP.")
+        if event_ids:
+            print(f"[+] Associated Event IDs: {', '.join(map(str, event_ids))}")
+            if event_infos:
+                print("[+] Associated Event Info (Sample):")
+                for eid, info in event_infos.items():
+                    print(f"  - {eid}: {info}")
+
+    elif arg_MISP_disabled:
+        print("[!] MISP lookup skipped (disabled by user flag --no_MISP).")
+    elif misp_results is None and config.MISP_URL and config.MISP_API_KEY:
+        print("[-] IOC not found in MISP or an error occurred during lookup.")
+    elif not config.MISP_URL or not config.MISP_API_KEY:
+        print("[!] MISP lookup skipped (URL or API key not configured).")
+    else:
+        print("[-] No MISP data available.")
+
     print("\n" + "=" * 40)
 
 
@@ -161,6 +185,11 @@ def main():
         action='store_true',
         help="Disable AlienVault OTX enrichment"
     )
+    parser.add_argument(
+        '-nmisp', '--no_MISP',
+        action='store_true',
+        help="Disable MISP enrichment lookup"
+    )
     args = parser.parse_args()
 
     # --- Assume --ioc is present due to required=True ---
@@ -177,11 +206,17 @@ def main():
     # --- Enrichment ---
     print(f"[*] Starting external enrichment...")
     vt_data = None
-    abuseipdb_data = None
-    otx_data = None
     vt_api_key = config.VT_API_KEY
+
+    abuseipdb_data = None
     abuseipdb_api_key = config.ABUSEIPDB_API_KEY
+
+    otx_data = None
     otx_api_key = config.OTX_API_KEY
+
+    misp_data = None
+    misp_api_key = config.MISP_API_KEY
+    misp_url = config.MISP_URL
 
     if ioc_type == 'unknown':
         print("[!] Cannot perform enrichment on 'unknown' IOC type.")
@@ -217,17 +252,30 @@ def main():
         else:
             print("[!] Skipping OTX (API key missing)")
 
-        print("[*] Enrichment finished.")
+        # # --- MISP Call ---
+        # if not args.no_MISP:  # Check flag
+        #     if misp_url and misp_api_key:  # Check config
+        #         print("[*] Querying MISP instance...")
+        #         misp_data = enrich_misp(indicator_to_query, ioc_type)  # URL/Key implicitly from config
+        #     else:
+        #         print("[!] Skipping MISP (URL or API key missing)")
+        # else:
+        #     print("[!] Skipping MISP (disabled by user flag --no_MISP)")
+        #
+        # print("[*] Enrichment finished.")
 
     print("[*] Enrichment finished.")
+
     display_results(
         ioc_value=indicator_to_query,
         ioc_type=ioc_type,
 
         local_results=local_results,
+
         arg_VT_disabled=args.no_VT,
         arg_AIPDB_disabled=args.no_AIPDB,
         arg_OTX_disabled=args.no_OTX,
+        arg_MISP_disabled=True,
 
         vt_results=vt_data,
         abuseipdb_results=abuseipdb_data,

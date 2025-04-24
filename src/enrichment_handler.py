@@ -3,6 +3,14 @@ import base64
 import requests
 from OTXv2 import OTXv2
 
+try:
+    from pymisp import PyMISP, MISPServerError  # Import PyMISP and common errors
+
+    PYMISP_AVAILABLE = True
+except ImportError:
+    print("[Warning] pymisp library not installed. MISP feed processing will be skipped.")
+    PYMISP_AVAILABLE = False
+
 from . import config
 from .feed_handler import OTX_SDK_AVAILABLE
 
@@ -13,7 +21,7 @@ OTX_API_BASE_URL = "https://otx.alienvault.com"
 # --- Type Mapping for OTX API Calls ---
 OTX_API_PATH_TYPE_MAP = {
     "ipv4": "ip",
-    # "ipv6": "ip",     # Assuming IPv6 might also use 'ip', needs testing if IPv6 is added
+    # "ipv6": "ip", # Assuming IPv6 might also use 'ip', needs testing if IPv6 is added
     "domain": "domain",
     "hostname": "hostname",  # Keep as hostname (OTX differentiates)
     "url": "url",
@@ -25,11 +33,24 @@ INTERNAL_TYPE_TO_OTX_MAP = {
     "ipv4": "IPv4",
     "ipv6": "IPv6",
     "domain": "domain",
-    # "hostname": "hostname",  # SDK might just use 'domain' or handle internally
+    # "hostname": "hostname", # SDK might just use 'domain' or handle internally
     "url": "URL",
     "md5": "FileHash-MD5",
     "sha1": "FileHash-SHA1",
     "sha256": "FileHash-SHA256",
+}
+
+# --- Type Mapping for MISP calls (on my server) ---
+INTERNAL_TYPE_TO_MISP_TYPE_MAP = {
+    "ipv4": ["ip-src", "ip-dst"],  # Search for either source or destination IP
+    "domain": ["domain", "hostname"],  # Search for domain or hostname
+    "url": ["url"],
+    "md5": ["md5"],
+    "sha1": ["sha1"],
+    "sha256": ["sha256"],
+    "filename": ["filename"],
+    "regkey": ["regkey"],
+    "user-agent": ["user-agent"],
 }
 
 
@@ -335,3 +356,85 @@ def enrich_otx(ioc_value, ioc_type, api_key):
     except Exception as e:  # Catch potential JSON parsing errors etc.
         print(f"OTX API: Error processing response for {ioc_value}: {e}")
         return None
+
+
+# def enrich_misp(
+#         ioc_value,
+#         ioc_type,  # Keep ioc_type for logging/context
+#         misp_url=config.MISP_URL,
+#         misp_key=config.MISP_API_KEY,
+#         verify_cert=config.MISP_VERIFYCERT
+# ):
+#     """
+#     Enriches an IOC by searching for EVENTS containing the IOC value using misp.search_index().
+#     Uses print() for output.
+#     """
+#     if not PYMISP_AVAILABLE:
+#         print("[!] MISP enrichment skipped: pymisp library not installed.")
+#         return None
+#     if not misp_url or not misp_key:
+#         print("[!] MISP enrichment skipped: MISP_URL or MISP_API_KEY not configured.")
+#         return None
+#
+#     # Type mapping not needed for search_index(attribute=...) filter
+#     print(f"[*] Attempting MISP enrichment for IOC value: {ioc_value} at {misp_url} using search_index")
+#
+#     misp = None
+#     try:
+#         misp = PyMISP(misp_url, misp_key, verify_cert, 'json')
+#         print(f"[*] Successfully initialized PyMISP for enrichment.")
+#     except Exception as e:
+#         print(f"[!] Failed to initialize PyMISP client for enrichment: {e}")
+#         return None
+#
+#     # --- Search for EVENTS containing the attribute value using search_index ---
+#     found_events = []  # Will store MISPEvent objects
+#     try:
+#         print(f"[*] Searching MISP index for events containing attribute value '{ioc_value}'...")
+#
+#         # Use search_index filtering by attribute value
+#         found_events = misp.search_index(
+#             attribute=ioc_value,
+#             pythonify=True  # Get MISPEvent objects
+#         )
+#
+#         print(found_events[:5])
+#
+#     except MISPServerError as e:
+#         print(f"[!] MISP Server Error during search_index: {e}")
+#         return None
+#
+#     except Exception as e:
+#         print(f"[!] Error during MISP search_index: {e}")
+#         return None
+#
+#     # --- Process results (list of MISPEvent objects) ---
+#     if not found_events:
+#         # Note: This might include events where the value matched an attribute of the WRONG type
+#         print(f"[*] IOC value not found in any MISP events using search_index: {ioc_value}")
+#         return None  # Indicate not found
+#     else:
+#         # Note: This count includes events where the value might match attributes of the WRONG type
+#         print(f"[*] Found {len(found_events)} MISP event(s) containing value '{ioc_value}' (may include type mismatches).")
+#
+#         event_ids = set()
+#         event_infos = {}
+#         for event in found_events[:5]:  # Limit processing
+#             # Access attributes using getattr for PyMISP objects
+#             event_id = getattr(event, 'id', None)
+#             if event_id:
+#                 event_ids.add(event_id)
+#                 if hasattr(event, 'info') and getattr(event, 'info', None):
+#                     event_info = getattr(event, 'info')
+#                     event_infos[event_id] = event_info.split('\n')[0][:70]
+#                 else:
+#                     event_infos[event_id] = f"Event {event_id}"  # Fallback
+#
+#         extracted_data = {
+#             'misp_event_hit_count': len(found_events),
+#             'misp_event_ids': list(event_ids),
+#             'misp_event_infos': event_infos
+#         }
+#         # Add a note about potential type mismatches?
+#         extracted_data['misp_search_method'] = 'search_index (value only)'
+#         return extracted_data
