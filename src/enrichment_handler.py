@@ -1,15 +1,14 @@
-import time
 import base64
 import requests
-from OTXv2 import OTXv2
+import urllib.parse
 
-try:
-    from pymisp import PyMISP, MISPServerError  # Import PyMISP and common errors
-
-    PYMISP_AVAILABLE = True
-except ImportError:
-    print("[Warning] pymisp library not installed. MISP feed processing will be skipped.")
-    PYMISP_AVAILABLE = False
+# try:
+#     from pymisp import PyMISP, MISPServerError  # Import PyMISP and common errors
+#
+#     PYMISP_AVAILABLE = True
+# except ImportError:
+#     print("[Warning] pymisp library not installed. MISP feed processing will be skipped.")
+#     PYMISP_AVAILABLE = False
 
 from . import config
 from .feed_handler import OTX_SDK_AVAILABLE
@@ -17,6 +16,7 @@ from .feed_handler import OTX_SDK_AVAILABLE
 VT_BASE_URL = "https://www.virustotal.com/api/v3"
 ABUSEIPDB_BASE_URL = "https://api.abuseipdb.com/api/v2/check"
 OTX_API_BASE_URL = "https://otx.alienvault.com"
+URLSCAN_API_BASE = "https://urlscan.io/api/v1"
 
 # --- Type Mapping for OTX API Calls ---
 OTX_API_PATH_TYPE_MAP = {
@@ -357,6 +357,100 @@ def enrich_otx(ioc_value, ioc_type, api_key):
         print(f"OTX API: Error processing response for {ioc_value}: {e}")
         return None
 
+
+def enrich_urlscan(ioc_value, ioc_type, api_key):
+    """
+    Enriches an IOC by searching for existing scans on URLScan.io.
+    Supports 'url', 'domain', 'ipv4', 'md5', 'sha1', 'sha256'.
+    """
+    if not api_key:
+        print("[!] URLScan.io enrichment skipped: API key missing.")
+        return None
+
+    # --- Build Search Query ---
+    query = ""
+    if ioc_type == 'url':
+        query = f'page.url:"{ioc_value}"'
+    elif ioc_type == 'domain':
+        query = f'page.domain:"{ioc_value}"'
+    elif ioc_type == 'ipv4':
+        query = f'page.ip:"{ioc_value}"'
+    # --- Add Hash Types ---
+    elif ioc_type in ['md5', 'sha1', 'sha256']:
+        # URLScan search uses 'hash:' for any supported hash type
+        query = f'hash:{ioc_value}'
+    else:
+        # Skip unsupported types for URLScan enrichment
+        print(f"[*] URLScan.io enrichment skipped: Type '{ioc_type}' not supported for search.")
+        return None  # Return None, not an error, just not supported
+
+    # URL encode the query part
+    encoded_query = urllib.parse.quote(query)
+    search_url = f"{URLSCAN_API_BASE}/search/?q={encoded_query}"
+
+    headers = {
+        'API-Key': api_key,
+        'Accept': 'application/json',
+        'User-Agent': getattr(config, 'USER_AGENT', 'ThreatIntelTool/0.1')
+    }
+
+    try:
+        print(f"[*] Querying URLScan.io Search API for: {query}")
+        response = requests.get(search_url, headers=headers, timeout=20)
+
+        # --- Process Response ---
+        if response.status_code == 200:
+            results_data = response.json()
+            results = results_data.get('results', [])
+            total_hits = results_data.get('total', 0)
+
+            if total_hits == 0 or not results:
+                print(f"[*] IOC not found in URLScan.io scans: {ioc_value} (Query: {query})")
+                return None
+
+            print(f"[*] URLScan.io: Found {total_hits} scan(s). Processing most recent.")
+
+            latest_scan = results[0]
+            task_info = latest_scan.get('task', {})
+            page_info = latest_scan.get('page', {})
+            stats_info = latest_scan.get('stats', {})
+
+            extracted_data = {
+                'urlscan_total_hits': total_hits,
+                'urlscan_latest_scan_id': task_info.get('uuid'),
+                'urlscan_latest_scan_url': task_info.get('url'),
+                'urlscan_latest_scan_date': task_info.get('time'),
+                'urlscan_latest_page_url': page_info.get('url'),
+                'urlscan_latest_page_domain': page_info.get('domain'),
+                'urlscan_latest_page_ip': page_info.get('ip'),
+                'urlscan_verdict_malicious': stats_info.get('malicious'),
+                'urlscan_verdict_score': stats_info.get('malscore'),
+                'urlscan_report_url': latest_scan.get('result'),
+                'urlscan_screenshot_url': task_info.get('screenshotURL'),
+            }
+            return extracted_data
+
+        # --- Handle API Errors ---
+        # ... (Error handling for 404, 401, 429, etc. remains the same) ...
+        elif response.status_code == 401:
+            print(f"[!] URLScan.io API Error (401): Authentication failed. Check API key.")
+            return None
+        elif response.status_code == 429:
+            print(f"[!] URLScan.io API Error (429): Rate limit exceeded.")
+            return None
+        else:
+            print(f"[!] URLScan.io API Error ({response.status_code}): {response.text[:200]}")
+            return None
+
+    except requests.exceptions.Timeout:
+        print(f"[!] URLScan.io API: Request timed out for {query}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"[!] URLScan.io API: Request failed for {query}: {e}")
+        return None
+    except Exception as e:
+        print(f"[!] Error processing URLScan.io response for {query}: {e}")
+        return None
 
 # def enrich_misp(
 #         ioc_value,
