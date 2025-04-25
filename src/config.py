@@ -67,6 +67,10 @@ FIREHOL_FEEDS = {
     "graphiclineweb": os.getenv("GRAPHICLINEWEB_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/graphiclineweb.ipset"),
     "cleantalk_top20": os.getenv("CLEANTALK_TOP20_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/cleantalk_top20.ipset")
 }
+# Extra feeds found in the wild - mostly from independent security professionals
+OTHER_FEEDS = {
+    "ipsum": os.getenv("IPSUM_URL", "https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt"),
+}
 
 DEFAULT_USER_AGENT = "ThreatIntelTool/0.3"
 USER_AGENT = os.getenv("USER_AGENT", DEFAULT_USER_AGENT)

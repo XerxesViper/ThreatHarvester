@@ -861,29 +861,135 @@ def update_all_firehol_feeds(db_path=config.DATABASE_PATH):
     return total_processed_count
 
 
+"""
+===========================================================
+IPSUM feed functions
+
+https://github.com/stamparm/ipsum
+===========================================================
+"""
+IPSUM_SOURCE_NAME = "IPsum"
+
+
+def process_ipsum_feed(feed_content, db_path, source_name=IPSUM_SOURCE_NAME, feed_url=None, batch_size=1000):
+    """Parses IPsum feed (IP<tab>Count) and adds IOCs with tags."""
+    if not feed_content:
+        print(f"No content received for {source_name}, skipping processing.")
+        return 0
+
+    processed_lines = 0
+    total_added_count = 0
+    lines = feed_content.strip().splitlines()
+    ioc_batch = []
+
+    print(f"[*] Processing {source_name} feed...")
+    pbar = tqdm(lines, desc=f"Processing {source_name}", unit="line", leave=True)
+
+    for line in pbar:
+        processed_lines += 1
+        entry = line.strip()
+        if not entry or entry.startswith('#'):
+            continue
+
+        parts = entry.split('\t')  # Split by tab
+        if len(parts) != 2:
+            # pbar.write(f"Skipping malformed line in {source_name}: {entry}")
+            continue
+
+        ip_value = parts[0].strip()
+        count_str = parts[1].strip()
+
+        # Validate IP
+        if not IPV4_PATTERN.match(ip_value):
+            # pbar.write(f"Skipping non-IPv4 value in {source_name}: {ip_value}")
+            continue
+
+        # Validate and get count for tag
+        report_count = None
+        try:
+            report_count = int(count_str)
+        except ValueError:
+            # pbar.write(f"Skipping line with non-integer count in {source_name}: {entry}")
+            continue
+
+        # Prepare data for batch insert
+        ioc_type = 'ipv4'
+        last_seen_local = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        first_seen_feed = None  # No timestamp in feed
+        tags = f"ipsum_reports:{report_count}"  # Add count as tag
+
+        data_tuple = (ip_value, ioc_type, last_seen_local, source_name, feed_url, first_seen_feed, tags)
+        ioc_batch.append(data_tuple)
+
+        # Insert batch if size reached
+        if len(ioc_batch) >= batch_size:
+            total_added_count += add_iocs_batch(db_path, ioc_batch)
+            ioc_batch = []  # Clear the batch
+
+    # Insert any remaining items
+    if ioc_batch:
+        total_added_count += add_iocs_batch(db_path, ioc_batch)
+
+    pbar.close()
+    print(f"[*] Finished processing {source_name}. Processed {processed_lines} lines. Added/updated approx {total_added_count} IOCs.")
+    return total_added_count
+
+
+def update_ipsum_feed(db_path=config.DATABASE_PATH):
+    """Fetches and processes the IPsum feed."""
+    source_name = IPSUM_SOURCE_NAME
+    feed_key = "ipsum"  # Key used in config.OTHER_FEEDS
+
+    # Get URL from the config dictionary
+    feed_url = config.OTHER_FEEDS.get(feed_key)
+
+    if not feed_url:
+        print(f"[!] Skipping {source_name}: URL not found in config.OTHER_FEEDS['{feed_key}']")
+        return 0
+
+    print(f"\nStarting update for {source_name} from {feed_url}...")
+    feed_content = fetch_feed_content(feed_url)
+    if feed_content:
+        print(f"[*] Successfully fetched {source_name} feed ({len(feed_content)} bytes). Processing...")
+        process_ipsum_feed(  # Use the specific processor
+            feed_content=feed_content,
+            db_path=db_path,
+            source_name=source_name,
+            feed_url=feed_url
+        )
+    else:
+        print(f"[!] Failed to fetch {source_name} feed.")
+
+    return None
+
+
 if __name__ == "__main__":
-    print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
-    update_feodo_tracker()
-    print("-" * 20)
-
-    print(f"Running Malware Bazaar update directly. DB path: {config.DATABASE_PATH}")
-    update_malware_bazaar()
-    print("-" * 20)
-
-    print(f"Running URLhaus update directly. DB path: {config.DATABASE_PATH}")
-    update_urlhaus()
-    print("-" * 20)
+    # print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
+    # update_feodo_tracker()
+    # print("-" * 20)
     #
-    print(f"Running OTX update directly. DB path: {config.DATABASE_PATH}")
-    update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY)
-    print("-" * 20)
+    # print(f"Running Malware Bazaar update directly. DB path: {config.DATABASE_PATH}")
+    # update_malware_bazaar()
+    # print("-" * 20)
+    #
+    # print(f"Running URLhaus update directly. DB path: {config.DATABASE_PATH}")
+    # update_urlhaus()
+    # print("-" * 20)
+    # #
+    # print(f"Running OTX update directly. DB path: {config.DATABASE_PATH}")
+    # update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY)
+    # print("-" * 20)
 
     # print(f"Running MISP update directly. DB path: {config.DATABASE_PATH}")
     # update_misp_feed(db_path=config.DATABASE_PATH, misp_url=config.MISP_URL, misp_key=config.MISP_API_KEY, verify_cert=config.MISP_VERIFYCERT, source_name="MISP-Instance")
     # print("-" * 20)
 
-    print(f"Running FireHOL update directly. DB path: {config.DATABASE_PATH}")
-    update_all_firehol_feeds(db_path=config.DATABASE_PATH)
+    # print(f"Running FireHOL update directly. DB path: {config.DATABASE_PATH}")
+    # update_all_firehol_feeds(db_path=config.DATABASE_PATH)
+    # print("-" * 20)
+
+    print(f"Running IPSUM update directly. DB path: {config.DATABASE_PATH}")
+    update_ipsum_feed(db_path=config.DATABASE_PATH)
     print("-" * 20)
 
     print("Feed handler testing finished.")
