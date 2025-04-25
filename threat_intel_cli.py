@@ -4,11 +4,11 @@ from src.db_manager import query_ioc
 from src.utils import detect_ioc_type
 
 from src import config
-from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb, enrich_otx
+from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb, enrich_otx, enrich_urlscan
 
 
-def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled, arg_OTX_disabled, arg_MISP_disabled,
-                    vt_results=None, abuseipdb_results=None, otx_results=None, misp_results=None):
+def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled, arg_OTX_disabled, arg_MISP_disabled, arg_URLSCAN_disabled,
+                    vt_results=None, abuseipdb_results=None, otx_results=None, misp_results=None, urlscan_results=None, ):
     """Formats and prints the collected results."""
 
     print("\n" + "=" * 40)
@@ -156,6 +156,35 @@ def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIP
     else:
         print("[-] No MISP data available.")
 
+    # --- URLScan.io Enrichment ---
+    # Only show if relevant type was queried
+    if ioc_type in ['url', 'domain', 'ipv4', 'md5', 'sha1', 'sha256']:
+        print("\n--- URLScan.io Enrichment ---")
+        if urlscan_results:
+            total_hits = urlscan_results.get('urlscan_total_hits', 0)
+            print(f"[+] Found {total_hits} existing scan(s).")
+            if total_hits > 0:
+                print(f"[+] Latest Scan Info:")
+                print(f"  - Scan ID: {urlscan_results.get('urlscan_latest_scan_id', 'N/A')}")
+                print(f"  - Scan Date: {urlscan_results.get('urlscan_latest_scan_date', 'N/A')}")
+                print(f"  - Submitted URL: {urlscan_results.get('urlscan_latest_scan_url', 'N/A')}")
+                print(f"  - Final URL: {urlscan_results.get('urlscan_latest_page_url', 'N/A')}")
+                print(f"  - Final Domain: {urlscan_results.get('urlscan_latest_page_domain', 'N/A')}")
+                print(f"  - Final IP: {urlscan_results.get('urlscan_latest_page_ip', 'N/A')}")
+                print(f"  - Malicious Verdict: {urlscan_results.get('urlscan_verdict_malicious', 'N/A')}")
+                print(f"  - Malicious Score (0-100): {urlscan_results.get('urlscan_verdict_score', 'N/A')}")
+                print(f"  - Report Link: {urlscan_results.get('urlscan_report_url', 'N/A')}")
+                print(f"  - Screenshot: {urlscan_results.get('urlscan_screenshot_url', 'N/A')}")
+
+        elif arg_URLSCAN_disabled:
+            print("[!] URLScan.io lookup skipped (disabled by user flag --no_URLSCAN).")
+        elif urlscan_results is None and config.URLSCAN_API_KEY:
+            print("[-] IOC not found in URLScan.io or an error occurred during lookup.")
+        elif not config.URLSCAN_API_KEY:
+            print("[!] URLScan.io lookup skipped (API key not configured).")
+        else:
+            print("[-] No URLScan.io data available.")
+
     print("\n" + "=" * 40)
 
 
@@ -190,6 +219,16 @@ def main():
         action='store_true',
         help="Disable MISP enrichment lookup"
     )
+    parser.add_argument(
+        '-nurl', '--no_URLSCAN',
+        action='store_true',
+        help="Disable URLScan.io enrichment lookup"
+    )
+    parser.add_argument(
+        '-local', '--local_only',
+        action='store_true',
+        help="Only query local database for IOC - Disables all external enrichment calls"
+    )
     args = parser.parse_args()
 
     # --- Assume --ioc is present due to required=True ---
@@ -217,6 +256,9 @@ def main():
     misp_data = None
     misp_api_key = config.MISP_API_KEY
     misp_url = config.MISP_URL
+
+    urlscan_data = None
+    urlscan_api_key = config.URLSCAN_API_KEY
 
     if ioc_type == 'unknown':
         print("[!] Cannot perform enrichment on 'unknown' IOC type.")
@@ -264,6 +306,18 @@ def main():
         #
         # print("[*] Enrichment finished.")
 
+        if ioc_type in ['url', 'domain', 'ipv4', 'md5', 'sha1', 'sha256']:
+            if not args.no_URLSCAN:
+                if urlscan_api_key:
+                    print("[*] Querying URLScan.io...")
+                    urlscan_data = enrich_urlscan(indicator_to_query, ioc_type, urlscan_api_key)
+                else:
+                    print("[!] Skipping URLScan.io (API key missing)")
+            else:
+                print("[!] Skipping URLScan.io (disabled by user flag --no_URLSCAN)")
+        else:
+            print(f"[*] Skipping URLScan.io (type '{ioc_type}' not searchable)")
+
     print("[*] Enrichment finished.")
 
     display_results(
@@ -276,10 +330,13 @@ def main():
         arg_AIPDB_disabled=args.no_AIPDB,
         arg_OTX_disabled=args.no_OTX,
         arg_MISP_disabled=True,
+        arg_URLSCAN_disabled=args.no_URLSCAN,
 
         vt_results=vt_data,
         abuseipdb_results=abuseipdb_data,
         otx_results=otx_data,
+        misp_results=misp_data,
+        urlscan_results=urlscan_data,
     )
 
 
