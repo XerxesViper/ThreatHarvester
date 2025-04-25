@@ -21,6 +21,7 @@ IPV4_PATTERN = re.compile(
     r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
     r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
 )
+CIDR_PATTERN = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$")
 
 # Basic Domain Name - Allows letters, numbers, hyphens (not at start/end)
 # Does NOT validate TLDs strictly. Allows subdomains.
@@ -30,6 +31,7 @@ DOMAIN_PATTERN = re.compile(
     r"(?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+"  # Subdomains/domain part
     r"[a-zA-Z]{2,}$"  # TLD (at least 2 letters)
 )
+
 
 # Simple URL check - looks for schema://
 URL_PATTERN = re.compile(r"^[a-zA-Z]+://")
@@ -68,8 +70,12 @@ def detect_ioc_type(indicator):
 
     # 3. Check for URL (basic check for schema)
     # Check URL before domain, as URLs contain domains
-    if URL_PATTERN.match(indicator):
-        return 'url'
+    if "://" in indicator or ("/" in indicator and not CIDR_PATTERN.match(indicator)):  # Added CIDR check
+        # Optional extra validation: Does it *also* contain something domain-like?
+        # This helps avoid classifying "/some/local/path" as a URL.
+        # We look for at least one dot followed by letters.
+        if re.search(r"\.[a-zA-Z]", indicator.split('/', 1)[0].split('?', 1)[0]):  # Check part before first / or ?
+            return 'url'
 
     # 4. Check for Domain Name
     # Ensure it's not just an IP address that somehow failed the IP check

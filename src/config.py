@@ -12,6 +12,7 @@ VT_API_KEY = os.getenv("VT_API_KEY", None)
 ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", None)
 SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", None)
 OTX_API_KEY = os.getenv("OTX_API_KEY", None)
+URLSCAN_API_KEY = os.getenv("URLSCAN_API_KEY", None)
 
 MISP_URL = os.getenv("MISP_URL", None)
 MISP_API_KEY = os.getenv("MISP_API_KEY", None)

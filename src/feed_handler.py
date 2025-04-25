@@ -5,7 +5,6 @@ import requests
 import datetime
 import ipaddress
 from tqdm import tqdm
-import multiprocessing as mp
 
 try:
     from OTXv2 import OTXv2
@@ -25,7 +24,7 @@ except ImportError:
 
 # Local Imports
 from . import config
-from .utils import IPV4_PATTERN
+from .utils import IPV4_PATTERN, CIDR_PATTERN
 from .db_manager import add_ioc, add_iocs_batch
 
 
@@ -743,7 +742,6 @@ the most relevant one for the Threat Intel Feed Correlator.
 """
 
 FIREHOL_L1_SOURCE_NAME = "FireHOL_Level1"
-CIDR_PATTERN = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$")
 
 
 def process_firehol_feed(feed_content, db_path, source_name, feed_url=None, batch_size=1000):  # Add batch_size
