@@ -3,7 +3,9 @@ import io
 import csv
 import requests
 import datetime
+import ipaddress
 from tqdm import tqdm
+import multiprocessing as mp
 
 try:
     from OTXv2 import OTXv2
@@ -23,13 +25,14 @@ except ImportError:
 
 # Local Imports
 from . import config
-from .db_manager import add_ioc
+from .utils import IPV4_PATTERN
+from .db_manager import add_ioc, add_iocs_batch
 
 
 def fetch_feed_content(url, timeout=30):
     """ Fetches the contents of a feed from a given URL. """
 
-    user_agent = getattr(config, "USER_AGENT", 'ThreatIntelTool/0.1-TEST')
+    user_agent = getattr(config, "USER_AGENT", 'ThreatIntelTool/0.3-TEST')
 
     try:
         response = requests.get(url, timeout=timeout, headers={'User-Agent': user_agent})
@@ -49,7 +52,7 @@ Feodo Tracker feed functions
 """
 
 # Basic IPv4 regex matching pattern
-IP_PATTERN = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
+IP_PATTERN = IPV4_PATTERN
 
 
 def process_feodo_tracker_feed(feed_content, db_path, source_name="FeodoTrackerIPBlocklist", feed_url=None):
@@ -307,7 +310,12 @@ def process_urlhaus_feed(feed_content, db_path, source_name=URLHAUS_SOURCE_NAME,
 
     print(f"Processing {source_name} feed...")
 
+    ioc_batch = []
+    batch_size = 1000
+    total_added_count = 0
+
     try:
+        last_seen_local = datetime.datetime.now(datetime.timezone.utc).isoformat()
         for row in reader:
             url_value = clean_value(row.get('url', None))
             date_added = clean_value(row.get('dateadded', None))
@@ -331,17 +339,29 @@ def process_urlhaus_feed(feed_content, db_path, source_name=URLHAUS_SOURCE_NAME,
 
             final_tags_for_db = ",".join(db_tags_list) if db_tags_list else None
 
-            add_ioc(
-                db_path=db_path,
-                ioc_value=url_value,
-                ioc_type='url',
-                sources=source_name,
-                feed_url=feed_url,
-                first_seen_feed=date_added,
-                tags=final_tags_for_db
-            )
+            data_tuple = (url_value, "url", last_seen_local, source_name, url_value, date_added, final_tags_for_db)
+            ioc_batch.append(data_tuple)
+            # add_ioc(
+            #     db_path=db_path,
+            #     ioc_value=url_value,
+            #     ioc_type='url',
+            #     sources=source_name,
+            #     feed_url=feed_url,
+            #     first_seen_feed=date_added,
+            #     tags=final_tags_for_db
+            # )
 
             processed_urls += 1
+
+            if len(ioc_batch) >= batch_size:
+                total_added_count += add_iocs_batch(db_path, ioc_batch)
+                ioc_batch = []  # Clear the batch
+
+            # --- Insert any remaining items in the batch ---
+        if ioc_batch:
+            total_added_count += add_iocs_batch(db_path, ioc_batch)
+
+        print(f"Processed {processed_urls} URLs from {source_name}. Processed {total_added_count} entries.")
 
     except csv.Error as e:
         print(f"\nCSV DictReader error in {source_name}: {e}")
@@ -436,6 +456,9 @@ def update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY):
         print(f"[!] Error fetching pulses from OTX: {e}")
         return 0
 
+    ioc_batch = []
+    batch_size = 1000
+    total_added_count = 0
     pbar = tqdm(pulses, total=len(pulses), desc=f"Processing {OTX_SOURCE_NAME}", unit="entries")
     for pulse in pbar:
         pulse_id_for_error = "UNKNOWN_ID"  # Default for error messages
@@ -465,6 +488,8 @@ def update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY):
             if not indicators:
                 continue  # Skip pulse if it has no indicators
 
+            last_seen_local = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
             # --- Inner loop for indicators ---
             for indicator in indicators:
                 ioc_value = indicator.get('indicator')
@@ -489,20 +514,31 @@ def update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY):
                 first_seen = pulse_modified
 
                 # Add the IOC to the database
-                add_ioc(
-                    db_path=db_path,
-                    ioc_value=ioc_value,
-                    ioc_type=ioc_type,
-                    sources=OTX_SOURCE_NAME,
-                    feed_url=pulse_ref_url,
-                    first_seen_feed=first_seen,
-                    tags=final_tags_for_db
-                )
+                data_tuple = (ioc_value, ioc_type, last_seen_local, OTX_SOURCE_NAME, pulse_ref_url, first_seen, final_tags_for_db)
+
+                ioc_batch.append(data_tuple)
+                # add_ioc(
+                #     db_path=db_path,
+                #     ioc_value=ioc_value,
+                #     ioc_type=ioc_type,
+                #     sources=OTX_SOURCE_NAME,
+                #     feed_url=pulse_ref_url,
+                #     first_seen_feed=first_seen,
+                #     tags=final_tags_for_db
+                # )
                 processed_iocs_count += 1
 
         except Exception as e:
             # Catch errors during processing of a single pulse
             pbar.write(f"[!] Error processing pulse ID {pulse_id_for_error}: {e}")
+
+        if len(ioc_batch) >= batch_size:
+            total_added_count += add_iocs_batch(db_path, ioc_batch)
+            ioc_batch = []  # Clear the batch
+
+    # --- Insert any remaining items in the batch ---
+    if ioc_batch:
+        total_added_count += add_iocs_batch(db_path, ioc_batch)
 
     pbar.close()  # Close tqdm progress bar
     print(f"[*] Finished processing {OTX_SOURCE_NAME}. Added/updated approx {processed_iocs_count} IOCs.")  # Note: count includes updates/ignores
@@ -538,8 +574,6 @@ MISP_TYPE_MAP = {
     "user-agent": "user-agent",  # Example new type
     # Add more MISP attribute types as needed
 }
-
-
 
 # def update_misp_feed(
 #         db_path=config.DATABASE_PATH,
@@ -699,6 +733,133 @@ MISP_TYPE_MAP = {
 #     print(f"[*] Finished processing {source_name}. Added/updated approx {processed_iocs_count} IOCs.")
 #     return processed_iocs_count
 
+"""
+===========================================================
+FIREHOL feed functions
+
+Multiple .netset files are available for FireHOL. However here I will be using
+the most relevant one for the Threat Intel Feed Correlator.
+===========================================================
+"""
+
+FIREHOL_L1_SOURCE_NAME = "FireHOL_Level1"
+CIDR_PATTERN = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$")
+
+
+def process_firehol_feed(feed_content, db_path, source_name, feed_url=None, batch_size=1000):  # Add batch_size
+    """ Parses FireHOL feed, batches IOCs, and inserts them. """
+    if not feed_content: return 0
+
+    processed_lines = 0
+    total_added_count = 0
+    lines = feed_content.strip().splitlines()
+    ioc_batch = []  # Initialize batch list
+
+    print(f"[*] Processing {source_name} feed...")
+    pbar = tqdm(lines, desc=f"Processing {source_name}", unit="IPs", leave=True)
+
+    for line in pbar:
+        entry = line.strip()
+        processed_lines += 1
+        if not entry or entry.startswith('#'): continue
+
+        # --- Prepare data tuple (common part) ---
+        last_seen_local = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        # Default values for fields not present in FireHOL
+        first_seen_feed = None
+        tags = None
+
+        # --- Handle CIDR ---
+        if CIDR_PATTERN.match(entry):
+            try:
+                network = ipaddress.ip_network(entry, strict=False)
+                if network.version != 4: continue
+
+                if network.num_addresses <= 256:
+                    tags = f"cidr_source:{entry}"  # Add tag for expanded IPs
+                    for ip_obj in network.hosts():
+                        ioc_value = str(ip_obj)
+                        ioc_type = 'ipv4'
+                        # Prepare tuple in correct order for add_iocs_batch
+                        data_tuple = (ioc_value, ioc_type, last_seen_local, source_name, feed_url, first_seen_feed, tags)
+                        ioc_batch.append(data_tuple)
+                else:
+                    ioc_value = entry
+                    ioc_type = 'cidr'
+                    tags = None  # No extra tag for large CIDR itself
+                    data_tuple = (ioc_value, ioc_type, last_seen_local, source_name, feed_url, first_seen_feed, tags)
+                    ioc_batch.append(data_tuple)
+
+            except Exception as e:
+                pbar.write(f"[!] Error processing CIDR line {entry} in {source_name}: {e}")
+                continue
+
+        # --- Handle IPv4 ---
+        elif IPV4_PATTERN.match(entry):
+            ioc_value = entry
+            ioc_type = 'ipv4'
+            tags = None
+            data_tuple = (ioc_value, ioc_type, last_seen_local, source_name, feed_url, first_seen_feed, tags)
+            ioc_batch.append(data_tuple)
+
+        # --- Skip other lines ---
+        else:
+            continue
+
+            # --- Insert batch if size reached ---
+        if len(ioc_batch) >= batch_size:
+            total_added_count += add_iocs_batch(db_path, ioc_batch)
+            ioc_batch = []  # Clear the batch
+
+    # --- Insert any remaining items in the batch ---
+    if ioc_batch:
+        total_added_count += add_iocs_batch(db_path, ioc_batch)
+
+    pbar.close()
+    print(f"[*] Finished processing {source_name}. Processed {processed_lines} lines. Added/updated approx {total_added_count} IOCs.")
+    return total_added_count  # Return number of IOCs actually inserted/ignored
+
+
+def update_all_firehol_feeds(db_path=config.DATABASE_PATH):
+    """Fetches and processes all FireHOL feeds defined in config.FIREHOL_FEEDS."""
+
+    print("\n" + "-" * 10 + " Starting FireHOL Feed Updates " + "-" * 10)
+    total_processed_count = 0
+
+    # Check if the config dictionary exists and is not empty
+    if not hasattr(config, 'FIREHOL_FEEDS') or not config.FIREHOL_FEEDS:
+        print("[!] No FireHOL feeds defined in config.FIREHOL_FEEDS dictionary. Skipping.")
+        return 0
+
+    feed_count = len(config.FIREHOL_FEEDS)
+    processed_feed_num = 0
+
+    for feed_key, feed_url in config.FIREHOL_FEEDS.items():
+        processed_feed_num += 1
+        # Construct source name dynamically
+        source_name = f"FireHOL_{feed_key.replace('_', '-')}"  # Ensure clean name
+        print(f"\n[{processed_feed_num}/{feed_count}] Starting update for {source_name} from {feed_url}...")
+
+        if not feed_url:
+            print(f"[*] Skipping {source_name}: URL not configured.")
+            continue
+
+        feed_content = fetch_feed_content(feed_url)
+        if feed_content:
+            # Use the updated processor
+            processed_count = process_firehol_feed(
+                feed_content=feed_content,
+                db_path=db_path,
+                source_name=source_name,
+                feed_url=feed_url
+            )
+            total_processed_count += processed_count
+        else:
+            print(f"[!] Failed to fetch {source_name} feed.")
+
+    print("\n" + "-" * 10 + f" Finished FireHOL Feed Updates. Processed approx {total_processed_count} IOCs across {feed_count} feeds." + "-" * 10)
+    return total_processed_count
+
 
 if __name__ == "__main__":
     print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
@@ -712,7 +873,7 @@ if __name__ == "__main__":
     print(f"Running URLhaus update directly. DB path: {config.DATABASE_PATH}")
     update_urlhaus()
     print("-" * 20)
-
+    #
     print(f"Running OTX update directly. DB path: {config.DATABASE_PATH}")
     update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY)
     print("-" * 20)
@@ -720,4 +881,9 @@ if __name__ == "__main__":
     # print(f"Running MISP update directly. DB path: {config.DATABASE_PATH}")
     # update_misp_feed(db_path=config.DATABASE_PATH, misp_url=config.MISP_URL, misp_key=config.MISP_API_KEY, verify_cert=config.MISP_VERIFYCERT, source_name="MISP-Instance")
     # print("-" * 20)
+
+    print(f"Running FireHOL update directly. DB path: {config.DATABASE_PATH}")
+    update_all_firehol_feeds(db_path=config.DATABASE_PATH)
+    print("-" * 20)
+
     print("Feed handler testing finished.")
