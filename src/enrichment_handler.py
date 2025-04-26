@@ -10,6 +10,15 @@ import urllib.parse
 #     print("[Warning] pymisp library not installed. MISP feed processing will be skipped.")
 #     PYMISP_AVAILABLE = False
 
+try:
+    import shodan
+    from shodan.exception import APIError as ShodanAPIError
+
+    SHODAN_AVAILABLE = True
+except ImportError:
+    print("[Warning] shodan library not installed. Shodan enrichment will be skipped.")
+    SHODAN_AVAILABLE = False
+
 from . import config
 from .feed_handler import OTX_SDK_AVAILABLE
 
@@ -450,6 +459,74 @@ def enrich_urlscan(ioc_value, ioc_type, api_key):
         return None
     except Exception as e:
         print(f"[!] Error processing URLScan.io response for {query}: {e}")
+        return None
+
+
+def enrich_shodan(ip_address, api_key):
+    """
+    Enriches an IP address using the Shodan API.
+    """
+    if not SHODAN_AVAILABLE:
+        print("[!] Shodan enrichment skipped: shodan library not installed.")
+        return None
+    if not api_key:
+        print("[!] Shodan enrichment skipped: API key missing.")
+        return None
+
+    print(f"[*] Querying Shodan for IP: {ip_address}")
+    try:
+        api = shodan.Shodan(api_key)
+        # Lookup the host
+        host_info = api.host(ip_address)
+
+        # --- Parse the results ---
+        # Extract key information
+        open_ports = host_info.get('ports', [])
+        hostnames = host_info.get('hostnames', [])
+        domains = host_info.get('domains', [])
+        asn = host_info.get('asn', 'N/A')
+        isp = host_info.get('isp', 'N/A')
+        org = host_info.get('org', 'N/A')
+        country = host_info.get('country_name', 'N/A')
+        city = host_info.get('city', 'N/A')
+        os_version = host_info.get('os', None)  # OS fingerprinting
+
+        # Extract service details from the 'data' list
+        services = []
+        for item in host_info.get('data', []):
+            service_info = {
+                'port': item.get('port'),
+                'transport': item.get('transport', 'tcp'),  # Default to tcp
+                'product': item.get('product'),
+                'version': item.get('version'),
+                'cpes': item.get('cpe'),  # Common Platform Enumeration
+                # Add 'banner': item.get('banner') if needed, can be large
+            }
+            services.append(service_info)
+
+        extracted_data = {
+            'shodan_asn': asn,
+            'shodan_isp': isp,
+            'shodan_org': org,
+            'shodan_os': os_version,
+            'shodan_country': country,
+            'shodan_city': city,
+            'shodan_hostnames': hostnames,
+            'shodan_domains': domains,
+            'shodan_open_ports': open_ports,
+            'shodan_services': services  # List of service dictionaries
+            # Add 'shodan_vulns': host_info.get('vulns') if needed (often requires paid key)
+        }
+        print(f"[*] Shodan: Success for {ip_address}")
+        return extracted_data
+
+    except ShodanAPIError as e:
+        # Handle Shodan specific errors (e.g., "No information available for that IP.")
+        print(f"[!] Shodan API Error for {ip_address}: {e}")
+        return None  # Indicate not found or error
+    except Exception as e:
+        # Handle other potential errors (network, etc.)
+        print(f"[!] Error during Shodan lookup for {ip_address}: {e}")
         return None
 
 # def enrich_misp(

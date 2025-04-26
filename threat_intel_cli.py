@@ -4,11 +4,28 @@ from src.db_manager import query_ioc
 from src.utils import detect_ioc_type
 
 from src import config
-from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb, enrich_otx, enrich_urlscan
+from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb, enrich_otx, enrich_urlscan, enrich_shodan
 
 
-def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIPDB_disabled, arg_OTX_disabled, arg_MISP_disabled, arg_URLSCAN_disabled,
-                    vt_results=None, abuseipdb_results=None, otx_results=None, misp_results=None, urlscan_results=None, ):
+def display_results(
+        ioc_value,
+        ioc_type,
+        local_results,
+
+        arg_VT_disabled,
+        arg_AIPDB_disabled,
+        arg_OTX_disabled,
+        arg_MISP_disabled,
+        arg_URLSCAN_disabled,
+        arg_SHODAN_disabled,
+
+        vt_results=None,
+        abuseipdb_results=None,
+        otx_results=None,
+        misp_results=None,
+        urlscan_results=None,
+        shodan_results=None,
+):
     """Formats and prints the collected results."""
 
     print("\n" + "=" * 40)
@@ -185,6 +202,35 @@ def display_results(ioc_value, ioc_type, local_results, arg_VT_disabled, arg_AIP
         else:
             print("[-] No URLScan.io data available.")
 
+    # --- Shodan Enrichment (Only show if IP was queried) ---
+    if ioc_type == 'ipv4':
+        print("\n--- Shodan Enrichment ---")
+        if shodan_results:
+            print(f"[+] ASN: {shodan_results.get('shodan_asn', 'N/A')}")
+            print(f"[+] ISP: {shodan_results.get('shodan_isp', 'N/A')}")
+            print(f"[+] Organization: {shodan_results.get('shodan_org', 'N/A')}")
+            print(f"[+] Location: {shodan_results.get('shodan_city', 'N/A')}, {shodan_results.get('shodan_country', 'N/A')}")
+            print(f"[+] OS: {shodan_results.get('shodan_os', 'N/A')}")
+            print(f"[+] Hostnames: {', '.join(shodan_results.get('shodan_hostnames', [])) if shodan_results.get('shodan_hostnames') else 'None'}")
+            print(f"[+] Domains: {', '.join(shodan_results.get('shodan_domains', [])) if shodan_results.get('shodan_domains') else 'None'}")
+            print(f"[+] Open Ports: {', '.join(map(str, shodan_results.get('shodan_open_ports', []))) if shodan_results.get('shodan_open_ports') else 'None'}")
+
+            services = shodan_results.get('shodan_services', [])
+            if services:
+                print("[+] Services:")
+                for svc in services[:10]:  # Limit output
+                    print(f"  - Port {svc.get('port')}/{svc.get('transport', 'tcp')}: Product={svc.get('product', 'N/A')}, Version={svc.get('version', 'N/A')}")
+            # Add Vulns if needed: print(f"[+] Vulns: {shodan_results.get('shodan_vulns')}")
+
+        elif arg_SHODAN_disabled:
+            print("[!] Shodan lookup skipped (disabled by user flag --no_SHODAN).")
+        elif shodan_results is None and config.SHODAN_API_KEY:
+            print("[-] IP not found in Shodan or an error occurred during lookup.")
+        elif not config.SHODAN_API_KEY:
+            print("[!] Shodan lookup skipped (API key not configured).")
+        else:
+            print("[-] No Shodan data available.")
+
     print("\n" + "=" * 40)
 
 
@@ -225,6 +271,11 @@ def main():
         help="Disable URLScan.io enrichment lookup"
     )
     parser.add_argument(
+        '--no_SHODAN',
+        action='store_true',
+        help="Disable Shodan enrichment lookup"
+    )
+    parser.add_argument(
         '-local', '--local_only',
         action='store_true',
         help="Only query local database for IOC - Disables all external enrichment calls"
@@ -259,6 +310,9 @@ def main():
 
     urlscan_data = None
     urlscan_api_key = config.URLSCAN_API_KEY
+
+    shodan_data = None
+    shodan_api_key = config.SHODAN_API_KEY
 
     if ioc_type == 'unknown':
         print("[!] Cannot perform enrichment on 'unknown' IOC type.")
@@ -306,6 +360,7 @@ def main():
         #
         # print("[*] Enrichment finished.")
 
+        # --- Conditional URLSCAN Call ---
         if ioc_type in ['url', 'domain', 'ipv4', 'md5', 'sha1', 'sha256']:
             if not args.no_URLSCAN:
                 if urlscan_api_key:
@@ -317,6 +372,17 @@ def main():
                 print("[!] Skipping URLScan.io (disabled by user flag --no_URLSCAN)")
         else:
             print(f"[*] Skipping URLScan.io (type '{ioc_type}' not searchable)")
+
+        # --- Shodan Call (IPs only) ---
+        if ioc_type == 'ipv4':
+            if not args.no_SHODAN:  # Check flag
+                if shodan_api_key:  # Check key
+                    print("[*] Querying Shodan...")
+                    shodan_data = enrich_shodan(indicator_to_query, shodan_api_key)
+                else:
+                    print("[!] Skipping Shodan (API key missing)")
+            else:
+                print("[!] Skipping Shodan (disabled by user flag --no_SHODAN)")
 
     print("[*] Enrichment finished.")
 
@@ -331,12 +397,14 @@ def main():
         arg_OTX_disabled=args.no_OTX,
         arg_MISP_disabled=True,
         arg_URLSCAN_disabled=args.no_URLSCAN,
+        arg_SHODAN_disabled=args.no_SHODAN,
 
         vt_results=vt_data,
         abuseipdb_results=abuseipdb_data,
         otx_results=otx_data,
         misp_results=misp_data,
         urlscan_results=urlscan_data,
+        shodan_results=shodan_data,
     )
 
 
