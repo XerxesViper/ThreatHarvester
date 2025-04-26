@@ -4,8 +4,8 @@ from src.db_manager import query_ioc
 from src.utils import detect_ioc_type
 
 from src import config
-from src.enrichment_handler import (enrich_virustotal, enrich_abuseipdb, enrich_otx,
-                                    enrich_urlscan, enrich_shodan, enrich_greynoise, enrich_ipinfo)
+from src.enrichment_handler import (enrich_virustotal, enrich_abuseipdb, enrich_otx, enrich_urlscan,
+                                    enrich_shodan, enrich_greynoise, enrich_ipinfo, enrich_malshare)
 
 
 def display_results(
@@ -21,6 +21,7 @@ def display_results(
         arg_SHODAN_disabled,
         arg_GREYNOISE_disabled,
         arg_IPINFO_disabled,
+        arg_MALSHARE_disabled,
 
         vt_results=None,
         abuseipdb_results=None,
@@ -30,6 +31,7 @@ def display_results(
         shodan_results=None,
         greynoise_results=None,
         ipinfo_results=None,
+        malshare_results=None,
 ):
     """Formats and prints the collected results."""
 
@@ -282,6 +284,39 @@ def display_results(
         else:
             print("[-] No IPinfo.io data available.")
 
+    # --- MalShare Enrichment (Only show if hash was queried) ---
+    if ioc_type in ['md5', 'sha1', 'sha256']:
+        print("\n--- MalShare Enrichment ---")
+        if malshare_results:
+            found = malshare_results.get('malshare_found', False)
+            if found:
+                print(f"[+] Hash FOUND in MalShare database.")
+                # --- Print Extracted Details ---
+                if malshare_results.get('malshare_md5'): print(f"  - MD5: {malshare_results['malshare_md5']}")
+                if malshare_results.get('malshare_sha1'): print(f"  - SHA1: {malshare_results['malshare_sha1']}")
+                if malshare_results.get('malshare_sha256'): print(f"  - SHA256: {malshare_results['malshare_sha256']}")
+                if malshare_results.get('malshare_ssdeep'): print(f"  - SSDEEP: {malshare_results['malshare_ssdeep']}")
+
+                filenames = malshare_results.get('malshare_file_names', [])
+                if filenames: print(f"  - Observed Filenames: {', '.join(filenames)}")
+
+                yara_hits = malshare_results.get('malshare_yara_hits', [])
+                if yara_hits: print(f"  - YARA Hits: {', '.join(yara_hits)}")
+
+                if 'malshare_raw_response' in malshare_results: print(f"  - Raw Response Snippet: {malshare_results['malshare_raw_response']}")
+
+            else:
+                print("[-] Hash not found in MalShare.")
+
+        elif arg_MALSHARE_disabled:
+            print("[!] MalShare lookup skipped (disabled by user flag --no_MALSHARE).")
+        elif malshare_results is None and config.MALSHARE_API_KEY:
+            print("[-] Hash not found in MalShare or an error occurred during lookup.")
+        elif not config.MALSHARE_API_KEY:
+            print("[!] MalShare lookup skipped (API key not configured).")
+        else:
+            print("[-] No MalShare data available.")
+
     print("\n" + "=" * 40)
 
 
@@ -337,6 +372,11 @@ def main():
         help="Disable IPinfo.io enrichment lookup"
     )
     parser.add_argument(
+        '--no_MALSHARE',
+        action='store_true',
+        help="Disable MalShare enrichment lookup"
+    )
+    parser.add_argument(
         '-local', '--local_only',
         action='store_true',
         help="Only query local database for IOC - Disables all external enrichment calls"
@@ -380,6 +420,9 @@ def main():
 
     ipinfo_data = None
     ipinfo_token = config.IPINFO_TOKEN
+
+    malshare_data = None
+    malshare_api_key = config.MALSHARE_API_KEY
 
     if ioc_type == 'unknown':
         print("[!] Cannot perform enrichment on 'unknown' IOC type.")
@@ -473,6 +516,17 @@ def main():
             else:
                 print("[!] Skipping IPinfo.io (disabled by user flag --no_IPINFO)")
 
+        # --- MalShare Call (Hashes only) ---
+        if ioc_type in ['md5', 'sha1', 'sha256']:
+            if not args.no_MALSHARE:  # Check flag
+                if malshare_api_key:  # Check key
+                    print("[*] Querying MalShare...")
+                    malshare_data = enrich_malshare(indicator_to_query, ioc_type, malshare_api_key)
+                else:
+                    print("[!] Skipping MalShare (API key missing)")
+            else:
+                print("[!] Skipping MalShare (disabled by user flag --no_MALSHARE)")
+
     print("[*] Enrichment finished.")
 
     display_results(
@@ -489,6 +543,7 @@ def main():
         arg_SHODAN_disabled=args.no_SHODAN,
         arg_GREYNOISE_disabled=args.no_GREYNOISE,
         arg_IPINFO_disabled=args.no_IPINFO,
+        arg_MALSHARE_disabled=args.no_MALSHARE,
 
         vt_results=vt_data,
         abuseipdb_results=abuseipdb_data,
@@ -498,6 +553,7 @@ def main():
         shodan_results=shodan_data,
         greynoise_results=greynoise_data,
         ipinfo_results=ipinfo_data,
+        malshare_results=malshare_data,
     )
 
 

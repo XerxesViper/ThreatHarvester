@@ -15,6 +15,7 @@ OTX_API_KEY = os.getenv("OTX_API_KEY", None)
 URLSCAN_API_KEY = os.getenv("URLSCAN_API_KEY", None)
 GREYNOISE_API_KEY = os.getenv("GREYNOISE_API_KEY", None)
 IPINFO_TOKEN = os.getenv("IPINFO_TOKEN", None)
+MALSHARE_API_KEY = os.getenv("MALSHARE_API_KEY", None)
 
 MISP_URL = os.getenv("MISP_URL", None)
 MISP_API_KEY = os.getenv("MISP_API_KEY", None)

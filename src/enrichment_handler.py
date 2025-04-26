@@ -1,3 +1,4 @@
+import json
 import base64
 import requests
 import urllib.parse
@@ -28,6 +29,7 @@ OTX_API_BASE_URL = "https://otx.alienvault.com"
 URLSCAN_API_BASE = "https://urlscan.io/api/v1"
 GREYNOISE_COMMUNITY_API = "https://api.greynoise.io/v3/community"  # V3 is the free one. #V2 is paid
 IPINFO_API_BASE = "https://ipinfo.io"
+MALSHARE_API_BASE = "https://malshare.com/api.php"
 
 # --- Type Mapping for OTX API Calls ---
 OTX_API_PATH_TYPE_MAP = {
@@ -674,6 +676,92 @@ def enrich_ipinfo(ip_address, api_token):
         return None
     except Exception as e:
         print(f"[!] Error processing IPinfo.io response for {ip_address}: {e}")
+        return None
+
+
+def enrich_malshare(hash_value, ioc_type, api_key):
+    """
+    Enriches a file hash using the MalShare API, extracting details like
+    other hashes, filenames, and YARA hits if available.
+    Supports 'md5', 'sha1', 'sha256'.
+    """
+    if ioc_type not in ['md5', 'sha1', 'sha256']:
+        return None
+    if not api_key:
+        print("[!] MalShare enrichment skipped: API key missing.")
+        return None
+
+    params = {'api_key': api_key, 'action': 'details', 'hash': hash_value}
+    headers = {'User-Agent': getattr(config, 'USER_AGENT', 'ThreatIntelTool/0.1')}
+
+    try:
+        print(f"[*] Querying MalShare API for hash: {hash_value}")
+        response = requests.get(MALSHARE_API_BASE, params=params, headers=headers, timeout=20)
+
+        if response.status_code == 200:
+            # Assume JSON response is most likely for structured data
+            try:
+                data = response.json()
+                # Check for explicit error messages within the JSON
+                if isinstance(data, dict) and ("Error" in data or "ERROR" in data):
+                    print(f"[*] MalShare API returned an error message: {data}")
+                    return None  # Treat API-level error as not found/error
+
+                # If we get here and data is not empty, assume hash found
+                print(f"[*] MalShare: Success - Hash found: {hash_value}")
+
+                # --- Extract Specific Fields ---
+                # Use .get() to safely access potential keys
+                md5 = data.get('MD5') if isinstance(data, dict) else None
+                sha1 = data.get('SHA1') if isinstance(data, dict) else None
+                sha256 = data.get('SHA256') if isinstance(data, dict) else None
+                ssdeep = data.get('SSDEEP') if isinstance(data, dict) else None
+                # File names might be in a list under a key like 'observed_file_names' or 'filenames'
+                file_names = data.get('FILENAMES', data.get('observed_file_names', [])) if isinstance(data, dict) else []
+                # YARA hits likely in a list under 'yara_hits' or 'yara'
+                yara_hits = data.get('yarahits', data.get('yarahits', [])) if isinstance(data, dict) else []
+                # --- End Extraction ---
+
+
+                extracted_data = {
+                    'malshare_found': True,
+                    'malshare_md5': md5,
+                    'malshare_sha1': sha1,
+                    'malshare_sha256': sha256,
+                    'malshare_ssdeep': ssdeep,
+                    'malshare_file_names': file_names if isinstance(file_names, list) else [],  # Ensure it's a list
+                    'malshare_yara_hits': yara_hits if isinstance(yara_hits, list) else []  # Ensure it's a list
+                }
+                return extracted_data
+
+            except json.JSONDecodeError:
+                # Handle cases where response is 200 OK but not valid JSON
+                response_text = response.text.strip()
+                if not response_text or "Not Found" in response_text or "Error" in response_text:
+                    print(f"[*] Hash not found in MalShare or API error message: {response_text}")
+                    return None
+                else:
+                    # Found, but couldn't parse details - maybe plain text confirmation?
+                    print(f"[*] MalShare: Hash found, but response was not JSON. Response: {response_text[:100]}")
+                    return {'malshare_found': True, 'malshare_raw_response': response_text[:100]}
+
+        # --- Handle API Errors ---
+        elif response.status_code == 401 or response.status_code == 403:
+            print(f"[!] MalShare API Error ({response.status_code}): Authentication failed. Check API key.")
+            return None
+        else:
+            print(f"[!] MalShare API Error ({response.status_code}): {response.text[:200]}")
+            return None
+
+    # ... (Timeout, RequestException, other Exception handling remains the same) ...
+    except requests.exceptions.Timeout:
+        print(f"[!] MalShare API: Request timed out for {hash_value}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"[!] MalShare API: Request failed for {hash_value}: {e}")
+        return None
+    except Exception as e:
+        print(f"[!] Error processing MalShare response for {hash_value}: {e}")
         return None
 # def enrich_misp(
 #         ioc_value,
