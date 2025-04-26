@@ -26,6 +26,7 @@ VT_BASE_URL = "https://www.virustotal.com/api/v3"
 ABUSEIPDB_BASE_URL = "https://api.abuseipdb.com/api/v2/check"
 OTX_API_BASE_URL = "https://otx.alienvault.com"
 URLSCAN_API_BASE = "https://urlscan.io/api/v1"
+GREYNOISE_COMMUNITY_API = "https://api.greynoise.io/v3/community"  # V3 is the free one. #V2 is paid
 
 # --- Type Mapping for OTX API Calls ---
 OTX_API_PATH_TYPE_MAP = {
@@ -529,6 +530,84 @@ def enrich_shodan(ip_address, api_key):
         print(f"[!] Error during Shodan lookup for {ip_address}: {e}")
         return None
 
+
+def enrich_greynoise(ip_address, api_key):
+    """
+    Enriches an IP address using the GreyNoise Community API.
+    """
+    if not api_key:
+        print("[!] GreyNoise enrichment skipped: API key missing.")
+        return None
+
+    url = f"{GREYNOISE_COMMUNITY_API}/{ip_address}"
+    headers = {
+        # GreyNoise uses 'key' header according to docs
+        'key': api_key,
+        'Accept': 'application/json',
+        'User-Agent': getattr(config, 'USER_AGENT', 'ThreatIntelTool/0.1')
+    }
+
+    try:
+        print(f"[*] Querying GreyNoise Community API for IP: {ip_address}")
+        response = requests.get(url, headers=headers, timeout=15)
+
+        # --- Process Response ---
+        if response.status_code == 200:
+            print(f"[*] GreyNoise: Success (200 OK) for {ip_address}")
+            data = response.json()
+
+            # Check if GreyNoise has classified it (might return 200 but 'noise': false)
+            if not data.get('noise') and not data.get('riot'):
+                print(f"[*] GreyNoise: IP not classified as noise or RIOT: {ip_address}")
+                # Return minimal info indicating it was checked but not noise/riot
+                return {
+                    'greynoise_seen': False,
+                    'greynoise_noise': False,
+                    'greynoise_riot': False,
+                    'greynoise_classification': data.get('classification', 'unknown'),  # Might still have classification
+                    'greynoise_message': data.get('message')  # e.g. "IP not seen scanning the internet"
+                }
+
+            extracted_data = {
+                'greynoise_seen': True,  # Indicate it was found in GreyNoise dataset
+                'greynoise_noise': data.get('noise'),  # True/False
+                'greynoise_riot': data.get('riot'),  # True/False
+                'greynoise_classification': data.get('classification'),  # malicious, benign, unknown
+                'greynoise_name': data.get('name'),  # Actor name
+                'greynoise_last_seen': data.get('last_seen'),
+                'greynoise_link': data.get('link'),  # Link to visualizer
+                # Add 'greynoise_message': data.get('message') if needed
+            }
+            return extracted_data
+
+        # --- Handle API Errors ---
+        elif response.status_code == 404:
+            # 404 likely means IP not in GreyNoise Community dataset (or endpoint wrong)
+            print(f"[*] GreyNoise: IP not found in Community dataset (404): {ip_address}")
+            return None  # Indicate not found
+        elif response.status_code == 400:
+            # 400 often means invalid IP format
+            print(f"[!] GreyNoise API Error (400): Bad Request (Invalid IP?): {ip_address}. Response: {response.text[:200]}")
+            return None
+        elif response.status_code == 401:
+            print(f"[!] GreyNoise API Error (401): Authentication failed. Check API key.")
+            return None
+        elif response.status_code == 429:
+            print(f"[!] GreyNoise API Error (429): Rate limit exceeded.")
+            return None
+        else:
+            print(f"[!] GreyNoise API Error ({response.status_code}): {response.text[:200]}")
+            return None
+
+    except requests.exceptions.Timeout:
+        print(f"[!] GreyNoise API: Request timed out for {ip_address}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"[!] GreyNoise API: Request failed for {ip_address}: {e}")
+        return None
+    except Exception as e:
+        print(f"[!] Error processing GreyNoise response for {ip_address}: {e}")
+        return None
 # def enrich_misp(
 #         ioc_value,
 #         ioc_type,  # Keep ioc_type for logging/context

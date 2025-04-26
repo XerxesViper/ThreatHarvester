@@ -4,7 +4,8 @@ from src.db_manager import query_ioc
 from src.utils import detect_ioc_type
 
 from src import config
-from src.enrichment_handler import enrich_virustotal, enrich_abuseipdb, enrich_otx, enrich_urlscan, enrich_shodan
+from src.enrichment_handler import (enrich_virustotal, enrich_abuseipdb, enrich_otx,
+                                    enrich_urlscan, enrich_shodan, enrich_greynoise)
 
 
 def display_results(
@@ -18,6 +19,7 @@ def display_results(
         arg_MISP_disabled,
         arg_URLSCAN_disabled,
         arg_SHODAN_disabled,
+        arg_GREYNOISE_disabled,
 
         vt_results=None,
         abuseipdb_results=None,
@@ -25,6 +27,7 @@ def display_results(
         misp_results=None,
         urlscan_results=None,
         shodan_results=None,
+        greynoise_results=None,
 ):
     """Formats and prints the collected results."""
 
@@ -231,6 +234,32 @@ def display_results(
         else:
             print("[-] No Shodan data available.")
 
+    # --- GreyNoise Enrichment (Only show if IP was queried) ---
+    if ioc_type == 'ipv4':
+        print("\n--- GreyNoise Enrichment ---")
+        if greynoise_results:
+            seen = greynoise_results.get('greynoise_seen', False)  # Check if seen at all
+            if seen:
+                print(f"[+] Noise Actor: {greynoise_results.get('greynoise_name', 'N/A')}")
+                print(f"[+] Classification: {greynoise_results.get('greynoise_classification', 'N/A')}")
+                print(f"[+] Last Seen: {greynoise_results.get('greynoise_last_seen', 'N/A')}")
+                print(f"[+] Is Noise: {greynoise_results.get('greynoise_noise', 'N/A')}")
+                print(f"[+] Is RIOT (Benign Service): {greynoise_results.get('greynoise_riot', 'N/A')}")
+                print(f"[+] Visualizer Link: {greynoise_results.get('greynoise_link', 'N/A')}")
+            else:
+                # IP was checked, but not classified as noise/riot
+                print(f"[*] IP not classified as Noise or RIOT by GreyNoise.")
+                # Optionally print message: print(f"    Message: {greynoise_results.get('greynoise_message')}")
+
+        elif arg_GREYNOISE_disabled:
+            print("[!] GreyNoise lookup skipped (disabled by user flag --no_GREYNOISE).")
+        elif greynoise_results is None and config.GREYNOISE_API_KEY:
+            print("[-] IP not found in GreyNoise Community dataset or an error occurred.")
+        elif not config.GREYNOISE_API_KEY:
+            print("[!] GreyNoise lookup skipped (API key not configured).")
+        else:
+            print("[-] No GreyNoise data available.")
+
     print("\n" + "=" * 40)
 
 
@@ -276,6 +305,11 @@ def main():
         help="Disable Shodan enrichment lookup"
     )
     parser.add_argument(
+        '--no_GREYNOISE',
+        action='store_true',
+        help="Disable GreyNoise enrichment lookup"
+    )
+    parser.add_argument(
         '-local', '--local_only',
         action='store_true',
         help="Only query local database for IOC - Disables all external enrichment calls"
@@ -313,6 +347,9 @@ def main():
 
     shodan_data = None
     shodan_api_key = config.SHODAN_API_KEY
+
+    greynoise_data = None
+    greynoise_api_key = config.GREYNOISE_API_KEY
 
     if ioc_type == 'unknown':
         print("[!] Cannot perform enrichment on 'unknown' IOC type.")
@@ -384,6 +421,17 @@ def main():
             else:
                 print("[!] Skipping Shodan (disabled by user flag --no_SHODAN)")
 
+        # --- GreyNoise Call (IPs only) ---
+        if ioc_type == 'ipv4':
+            if not args.no_GREYNOISE:  # Check flag
+                if greynoise_api_key:  # Check key
+                    print("[*] Querying GreyNoise...")
+                    greynoise_data = enrich_greynoise(indicator_to_query, greynoise_api_key)
+                else:
+                    print("[!] Skipping GreyNoise (API key missing)")
+            else:
+                print("[!] Skipping GreyNoise (disabled by user flag --no_GREYNOISE)")
+
     print("[*] Enrichment finished.")
 
     display_results(
@@ -398,6 +446,7 @@ def main():
         arg_MISP_disabled=True,
         arg_URLSCAN_disabled=args.no_URLSCAN,
         arg_SHODAN_disabled=args.no_SHODAN,
+        arg_GREYNOISE_disabled=args.no_GREYNOISE,
 
         vt_results=vt_data,
         abuseipdb_results=abuseipdb_data,
@@ -405,6 +454,7 @@ def main():
         misp_results=misp_data,
         urlscan_results=urlscan_data,
         shodan_results=shodan_data,
+        greynoise_results=greynoise_data,
     )
 
 
