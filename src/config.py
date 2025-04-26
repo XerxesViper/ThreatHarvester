@@ -76,5 +76,5 @@ OTHER_FEEDS = {
     "ipsum": os.getenv("IPSUM_URL", "https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt"),
 }
 
-DEFAULT_USER_AGENT = "ThreatIntelTool/0.3"
+DEFAULT_USER_AGENT = "ThreatIntelTool/1.0"
 USER_AGENT = os.getenv("USER_AGENT", DEFAULT_USER_AGENT)
