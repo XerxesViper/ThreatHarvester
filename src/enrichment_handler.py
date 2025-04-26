@@ -27,6 +27,7 @@ ABUSEIPDB_BASE_URL = "https://api.abuseipdb.com/api/v2/check"
 OTX_API_BASE_URL = "https://otx.alienvault.com"
 URLSCAN_API_BASE = "https://urlscan.io/api/v1"
 GREYNOISE_COMMUNITY_API = "https://api.greynoise.io/v3/community"  # V3 is the free one. #V2 is paid
+IPINFO_API_BASE = "https://ipinfo.io"
 
 # --- Type Mapping for OTX API Calls ---
 OTX_API_PATH_TYPE_MAP = {
@@ -607,6 +608,72 @@ def enrich_greynoise(ip_address, api_key):
         return None
     except Exception as e:
         print(f"[!] Error processing GreyNoise response for {ip_address}: {e}")
+        return None
+
+
+def enrich_ipinfo(ip_address, api_token):
+    """
+    Enriches an IP address using the IPinfo.io API.
+    """
+    if not api_token:
+        print("[!] IPinfo.io enrichment skipped: API token missing.")
+        return None
+
+    # Append token as query parameter
+    url = f"{IPINFO_API_BASE}/{ip_address}?token={api_token}"
+    headers = {
+        'Accept': 'application/json',
+        'User-Agent': getattr(config, 'USER_AGENT', 'ThreatIntelTool/0.1')
+    }
+
+    try:
+        print(f"[*] Querying IPinfo.io API for IP: {ip_address}")
+        # No specific payload needed, just GET request
+        response = requests.get(url, headers=headers, timeout=15)
+
+        # --- Process Response ---
+        if response.status_code == 200:
+            print(f"[*] IPinfo.io: Success (200 OK) for {ip_address}")
+            data = response.json()
+
+            # Extract relevant fields (check IPinfo docs for exact field names)
+            extracted_data = {
+                'ipinfo_hostname': data.get('hostname'),
+                'ipinfo_city': data.get('city'),
+                'ipinfo_region': data.get('region'),
+                'ipinfo_country': data.get('country'),  # 2-letter code
+                'ipinfo_location': data.get('loc'),  # Lat/Lon string
+                'ipinfo_org': data.get('org'),  # ASN + Org Name string
+                'ipinfo_postal': data.get('postal'),
+                'ipinfo_timezone': data.get('timezone'),
+                # Add 'ipinfo_abuse_email': data.get('abuse', {}).get('email') if needed
+            }
+            return extracted_data
+
+        # --- Handle API Errors ---
+        elif response.status_code == 404:
+            # 404 can mean private IP, bogon, or invalid IP format
+            print(f"[*] IPinfo.io: IP not found or invalid (404): {ip_address}")
+            return None  # Indicate not found/invalid
+        elif response.status_code == 401 or response.status_code == 403:
+            print(f"[!] IPinfo.io API Error ({response.status_code}): Authentication failed. Check API token.")
+            return None
+        elif response.status_code == 429:
+            # Should not happen with free tier if unlimited, but good practice
+            print(f"[!] IPinfo.io API Error (429): Rate limit exceeded?")
+            return None
+        else:
+            print(f"[!] IPinfo.io API Error ({response.status_code}): {response.text[:200]}")
+            return None
+
+    except requests.exceptions.Timeout:
+        print(f"[!] IPinfo.io API: Request timed out for {ip_address}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"[!] IPinfo.io API: Request failed for {ip_address}: {e}")
+        return None
+    except Exception as e:
+        print(f"[!] Error processing IPinfo.io response for {ip_address}: {e}")
         return None
 # def enrich_misp(
 #         ioc_value,

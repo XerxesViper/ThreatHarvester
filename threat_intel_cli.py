@@ -5,7 +5,7 @@ from src.utils import detect_ioc_type
 
 from src import config
 from src.enrichment_handler import (enrich_virustotal, enrich_abuseipdb, enrich_otx,
-                                    enrich_urlscan, enrich_shodan, enrich_greynoise)
+                                    enrich_urlscan, enrich_shodan, enrich_greynoise, enrich_ipinfo)
 
 
 def display_results(
@@ -20,6 +20,7 @@ def display_results(
         arg_URLSCAN_disabled,
         arg_SHODAN_disabled,
         arg_GREYNOISE_disabled,
+        arg_IPINFO_disabled,
 
         vt_results=None,
         abuseipdb_results=None,
@@ -28,6 +29,7 @@ def display_results(
         urlscan_results=None,
         shodan_results=None,
         greynoise_results=None,
+        ipinfo_results=None,
 ):
     """Formats and prints the collected results."""
 
@@ -260,6 +262,26 @@ def display_results(
         else:
             print("[-] No GreyNoise data available.")
 
+    # --- IPinfo.io Enrichment (Only show if IP was queried) ---
+    if ioc_type == 'ipv4':
+        print("\n--- IPinfo.io Enrichment ---")
+        if ipinfo_results:
+            print(f"[+] Hostname: {ipinfo_results.get('ipinfo_hostname', 'N/A')}")
+            print(f"[+] Location: {ipinfo_results.get('ipinfo_city', 'N/A')}, {ipinfo_results.get('ipinfo_region', 'N/A')}, {ipinfo_results.get('ipinfo_country', 'N/A')}")
+            print(f"[+] Coordinates: {ipinfo_results.get('ipinfo_location', 'N/A')}")
+            print(f"[+] Organization (ASN): {ipinfo_results.get('ipinfo_org', 'N/A')}")
+            print(f"[+] Postal Code: {ipinfo_results.get('ipinfo_postal', 'N/A')}")
+            print(f"[+] Timezone: {ipinfo_results.get('ipinfo_timezone', 'N/A')}")
+
+        elif arg_IPINFO_disabled:
+            print("[!] IPinfo.io lookup skipped (disabled by user flag --no_IPINFO).")
+        elif ipinfo_results is None and config.IPINFO_TOKEN:
+            print("[-] IP not found in IPinfo.io (or private/invalid) or an error occurred.")
+        elif not config.IPINFO_TOKEN:
+            print("[!] IPinfo.io lookup skipped (API token not configured).")
+        else:
+            print("[-] No IPinfo.io data available.")
+
     print("\n" + "=" * 40)
 
 
@@ -310,6 +332,11 @@ def main():
         help="Disable GreyNoise enrichment lookup"
     )
     parser.add_argument(
+        '--no_IPINFO',
+        action='store_true',
+        help="Disable IPinfo.io enrichment lookup"
+    )
+    parser.add_argument(
         '-local', '--local_only',
         action='store_true',
         help="Only query local database for IOC - Disables all external enrichment calls"
@@ -350,6 +377,9 @@ def main():
 
     greynoise_data = None
     greynoise_api_key = config.GREYNOISE_API_KEY
+
+    ipinfo_data = None
+    ipinfo_token = config.IPINFO_TOKEN
 
     if ioc_type == 'unknown':
         print("[!] Cannot perform enrichment on 'unknown' IOC type.")
@@ -432,6 +462,17 @@ def main():
             else:
                 print("[!] Skipping GreyNoise (disabled by user flag --no_GREYNOISE)")
 
+        # --- IPinfo Call (IPs only) ---
+        if ioc_type == 'ipv4':
+            if not args.no_IPINFO:  # Check flag
+                if ipinfo_token:  # Check token
+                    print("[*] Querying IPinfo.io...")
+                    ipinfo_data = enrich_ipinfo(indicator_to_query, ipinfo_token)
+                else:
+                    print("[!] Skipping IPinfo.io (API token missing)")
+            else:
+                print("[!] Skipping IPinfo.io (disabled by user flag --no_IPINFO)")
+
     print("[*] Enrichment finished.")
 
     display_results(
@@ -447,6 +488,7 @@ def main():
         arg_URLSCAN_disabled=args.no_URLSCAN,
         arg_SHODAN_disabled=args.no_SHODAN,
         arg_GREYNOISE_disabled=args.no_GREYNOISE,
+        arg_IPINFO_disabled=args.no_IPINFO,
 
         vt_results=vt_data,
         abuseipdb_results=abuseipdb_data,
@@ -455,6 +497,7 @@ def main():
         urlscan_results=urlscan_data,
         shodan_results=shodan_data,
         greynoise_results=greynoise_data,
+        ipinfo_results=ipinfo_data,
     )
 
 
