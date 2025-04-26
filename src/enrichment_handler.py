@@ -122,6 +122,7 @@ def enrich_virustotal(ioc_value, ioc_type, api_key):
         if response.status_code == 200:
             print(f"VirusTotal: Success (200 OK) for {ioc_value}")
             data = response.json()
+            # print(json.dumps(response.json(), sort_keys=True, indent=4, separators=(',', ': ')))
             attributes = data.get("data", {}).get("attributes", {})
 
             # Extract common useful fields
@@ -141,6 +142,25 @@ def enrich_virustotal(ioc_value, ioc_type, api_key):
                 extracted_data['vt_names'] = attributes.get('names')
                 extracted_data['vt_type_tags'] = attributes.get('type_tags')
                 extracted_data['vt_size'] = attributes.get('size')
+
+            yara_results_list = attributes.get('crowdsourced_yara_results', [])
+            # Store details (name, description) for each hit
+            yara_hits_details = []
+            if isinstance(yara_results_list, list):
+                for yara_hit in yara_results_list:
+                    # Ensure hit is a dict and has a rule_name
+                    if isinstance(yara_hit, dict) and yara_hit.get('rule_name'):
+                        hit_detail = {
+                            'rule_name': yara_hit['rule_name'],
+                            # Use .get() for description as it might be optional
+                            'description': yara_hit.get('description', 'N/A')
+                        }
+                        yara_hits_details.append(hit_detail)
+
+            # Add the list of details to extracted_data if any rules were found
+            if yara_hits_details:
+                # Use a different key name to reflect the change
+                extracted_data['vt_yara_hits_details'] = yara_hits_details
 
             return extracted_data
 
@@ -721,7 +741,6 @@ def enrich_malshare(hash_value, ioc_type, api_key):
                 # YARA hits likely in a list under 'yara_hits' or 'yara'
                 yara_hits = data.get('yarahits', data.get('yarahits', [])) if isinstance(data, dict) else []
                 # --- End Extraction ---
-
 
                 extracted_data = {
                     'malshare_found': True,

@@ -79,6 +79,15 @@ def display_results(
         if 'vt_country' in vt_results: print(f"[+] Country: {vt_results['vt_country']}")
         if 'vt_names' in vt_results: print(f"[+] Known Names: {vt_results['vt_names']}")
 
+        yara_hits = vt_results.get('vt_yara_hits_details')
+        if yara_hits:  # Check if the list exists and is not empty
+            print(f"[+] YARA Rules Matched ({len(yara_hits)}):")
+            for i, hit in enumerate(yara_hits):
+                # Safely get name and description from the hit dictionary
+                rule_name = hit.get('rule_name', 'Unknown Rule')
+                description = hit.get('description', 'No description available.')
+                print(f"  - Rule {i}: {rule_name} : {description}")
+
     # *** Use the passed flag to explain missing data ***
     elif arg_VT_disabled:
         print("[!] VirusTotal lookup skipped (disabled by user flag --no_VT).")
