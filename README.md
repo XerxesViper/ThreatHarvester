@@ -225,6 +225,6 @@ Queried IOCs are enriched using these external APIs:
 
 ## Contributing and Requests
 
-If you have request for any feature or anything else - Please drop me an email or message or just open an issue. I will be happy to do whatever I can.
+If you have request for any feature or anything else - Please drop me an email (xerxesviper@025609.xyz) or message or just open an issue. I will be happy to do whatever I can.
 
 All Contributions are welcome! Please feel free to submit a Pull Request or open an Issue.
