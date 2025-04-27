@@ -59,16 +59,16 @@ FIREHOL_FEEDS = {
     "cybercrime": os.getenv("CYBERCRIME_TRACKER_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/cybercrime.ipset"),
 
     "stopforumspam_365d": os.getenv("STOPFORUMSPAM_365D_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/stopforumspam_365d.ipset"),
-    "dronebl_irc_drones": os.getenv("DRONEBL_IRC_DRONES_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/dronebl_irc_drones.ipset"),
+    # "dronebl_irc_drones": os.getenv("DRONEBL_IRC_DRONES_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/dronebl_irc_drones.ipset"),
     "firehol_abusers_30d": os.getenv("FIREHOL_ABUSERS_30D_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_abusers_30d.netset"),
-    "stopforumspam": os.getenv("STOPFORUMSPAM_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/stopforumspam.ipset"),
+    "stopforumspam": os.getenv("STOPFORUMSPAM_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/stopforumspam.ipset"),
     "blocklist_net_ua": os.getenv("BLOCKLIST_NET_UA_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/blocklist_net_ua.ipset"),
     "cleantalk_updated_30d": os.getenv("CLEANTALK_UPDATED_30D_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/cleantalk_updated_30d.ipset"),
     "botscout_30d": os.getenv("BOTSCOUT_30D_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/botscout_30d.ipset"),
     "sblam": os.getenv("SBLAM_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/sblam.ipset"),
     "gpf_comics": os.getenv("GPF_COMICS_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/gpf_comics.ipset"),
     "iblocklist_forumspam": os.getenv("IBLOCKLIST_FORUMSPAM_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/iblocklist_forumspam.ipset"),
-    "graphiclineweb": os.getenv("GRAPHICLINEWEB_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/graphiclineweb.ipset"),
+    "graphiclineweb": os.getenv("GRAPHICLINEWEB_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/graphiclineweb.netset"),
     "cleantalk_top20": os.getenv("CLEANTALK_TOP20_URL", "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/cleantalk_top20.ipset")
 }
 # Extra feeds found in the wild - mostly from independent security professionals

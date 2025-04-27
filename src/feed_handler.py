@@ -962,29 +962,29 @@ def update_ipsum_feed(db_path=config.DATABASE_PATH):
 
 
 if __name__ == "__main__":
-    # print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
-    # update_feodo_tracker()
-    # print("-" * 20)
+    print(f"Running Feodo Tracker update directly. DB path: {config.DATABASE_PATH}")
+    update_feodo_tracker()
+    print("-" * 20)
+
+    print(f"Running Malware Bazaar update directly. DB path: {config.DATABASE_PATH}")
+    update_malware_bazaar()
+    print("-" * 20)
+
+    print(f"Running URLhaus update directly. DB path: {config.DATABASE_PATH}")
+    update_urlhaus()
+    print("-" * 20)
     #
-    # print(f"Running Malware Bazaar update directly. DB path: {config.DATABASE_PATH}")
-    # update_malware_bazaar()
-    # print("-" * 20)
-    #
-    # print(f"Running URLhaus update directly. DB path: {config.DATABASE_PATH}")
-    # update_urlhaus()
-    # print("-" * 20)
-    # #
-    # print(f"Running OTX update directly. DB path: {config.DATABASE_PATH}")
-    # update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY)
-    # print("-" * 20)
+    print(f"Running OTX update directly. DB path: {config.DATABASE_PATH}")
+    update_otx_feed(db_path=config.DATABASE_PATH, api_key=config.OTX_API_KEY)
+    print("-" * 20)
 
     # print(f"Running MISP update directly. DB path: {config.DATABASE_PATH}")
     # update_misp_feed(db_path=config.DATABASE_PATH, misp_url=config.MISP_URL, misp_key=config.MISP_API_KEY, verify_cert=config.MISP_VERIFYCERT, source_name="MISP-Instance")
     # print("-" * 20)
 
-    # print(f"Running FireHOL update directly. DB path: {config.DATABASE_PATH}")
-    # update_all_firehol_feeds(db_path=config.DATABASE_PATH)
-    # print("-" * 20)
+    print(f"Running FireHOL update directly. DB path: {config.DATABASE_PATH}")
+    update_all_firehol_feeds(db_path=config.DATABASE_PATH)
+    print("-" * 20)
 
     print(f"Running IPSUM update directly. DB path: {config.DATABASE_PATH}")
     update_ipsum_feed(db_path=config.DATABASE_PATH)
