@@ -6,8 +6,7 @@
 
 A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOCs) from various OSINT feeds, store them locally, and enrich queried indicators using external threat intelligence APIs.
 
-<!-- Placeholder: Add a single, compelling screenshot or GIF right here -->
-<!-- ![Tool Demo Screenshot](placeholder.png) -->
+**GIF HERE**
 
 ## Features
 
@@ -15,7 +14,7 @@ A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOC
     *   Abuse.ch Feodo Tracker (IPs)
     *   Abuse.ch Malware Bazaar (Hashes)
     *   Abuse.ch URLhaus (URLs)
-    *   **Extensive FireHOL IP Lists:** Includes Levels 1-4 and numerous component lists (dshield, spamhaus\_drop/edrop, blocklist\_de, bruteforceblocker, et\_block, feodo, malc0de, webclient, alienvault\_reputation, cybercrime, stopforumspam, dronebl, etc.) providing categorized IP/CIDR blocklists (*27 total lists*).
+    *   **Extensive FireHOL IP Lists:** Includes Levels 1-4 and numerous component lists (dshield, spamhaus\_drop/edrop, blocklist\_de, bruteforceblocker, et\_block, feodo, malc0de, webclient, alienvault\_reputation, cybercrime, stopforumspam, dronebl, etc.) providing categorized IP/CIDR blocklists (*26 total lists*).
     *   AlienVault OTX Pulses (IPs, Domains, Hashes, URLs, etc. from subscribed pulses)
     *   IPsum (IPs with report counts)
 *   **Local IOC Database:** Stores aggregated IOCs (value, type, source, tags, timestamps) in a local SQLite database for quick lookups. Handles basic deduplication via `INSERT OR IGNORE`.
@@ -30,7 +29,6 @@ A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOC
     *   GreyNoise Community API (Noise detection, Classification, Actor, etc.)
     *   IPinfo.io API (Geolocation, ASN, Company, etc.)
     *   MalShare API (Hash existence check, Associated hashes, Filenames)
-    *   <!-- MISP (Commented out for now) -->
 *   **Command-Line Interface:** Easy-to-use CLI for querying IOCs and selectively disabling enrichment sources.
 *   **Configurable:** API keys and feed URLs managed via `.env` file and `src/config.py`.
 
@@ -64,7 +62,7 @@ A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOC
     *   `tqdm`: For progress bars during feed processing
     *   `shodan`: Official Shodan library for enrichment
     *   `OTXv2`: Official AlienVault OTX SDK v2 (used for feed ingestion)
-    *   <!-- Add PyMISP if you revisit it -->
+    *    `re` : For Regular Expression (RegEx) compilation 
 *   **Database:** SQLite
 
 ## Installation & Setup
@@ -109,6 +107,7 @@ A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOC
         GREYNOISE_API_KEY=
         IPINFO_TOKEN=
         MALSHARE_API_KEY=
+        DATABASE_PATH=
         # MISP_URL= # Uncomment and set if using MISP enrichment later
         # MISP_API_KEY= # Uncomment and set if using MISP enrichment later
         # MISP_VERIFYCERT=False # Set to True if MISP has valid SSL
@@ -128,6 +127,7 @@ A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOC
     python -m src.feed_handler 
     ```
     *   Schedule this script to run periodically (e.g., daily) to keep the database updated.
+    * * Else If you would like to download the database that has already been created - It can be downloaded using ....
 
 ## Usage
 
@@ -158,6 +158,7 @@ python -m threat_intel_cli -h
 *   `--no_IPINFO`: Disable IPinfo.io enrichment.
 *   `--no_MALSHARE`: Disable MalShare enrichment.
 *   `--no_MISP`: Disable MISP enrichment (if implemented later).
+*   `--Local` : Disable all enrichment (Offline Mode)
 
 **Examples:**
 
@@ -179,14 +180,14 @@ python -m threat_intel_cli -i "http://some-malicious-url.com/payload.exe" --no_O
 
 The tool currently aggregates data from the following sources:
 
-| Source                | IOC Types          | Notes                                    |
-| :-------------------- | :----------------- | :--------------------------------------- |
-| Abuse.ch Feodo        | `ipv4`             | Botnet C2 IPs                            |
-| Abuse.ch MalwareBazaar| `md5`, `sha1`, `sha256` | Malware sample hashes & context          |
-| Abuse.ch URLhaus      | `url`              | Malicious URLs                           |
-| FireHOL (Multiple)    | `ipv4`, `cidr`     | ~25+ lists including Levels 1-4, dshield, spamhaus_drop/edrop, blocklist_de, et_block, etc. |
-| AlienVault OTX        | Various            | Pulses containing diverse IOC types      |
-| IPsum                 | `ipv4`             | IPs with report counts (added as tags) |
+| Source                 | IOC Types               | Notes                                                                                       |
+| :--------------------- | :---------------------- | :------------------------------------------------------------------------------------------ |
+| Abuse.ch Feodo         | `ipv4`                  | Botnet C2 IPs                                                                               |
+| Abuse.ch MalwareBazaar | `md5`, `sha1`, `sha256` | Malware sample hashes & context                                                             |
+| Abuse.ch URLhaus       | `url`                   | Malicious URLs                                                                              |
+| FireHOL (Multiple)     | `ipv4`, `cidr`          | ~25+ lists including Levels 1-4, dshield, spamhaus_drop/edrop, blocklist_de, et_block, etc. |
+| AlienVault OTX         | Various                 | Pulses containing diverse IOC types                                                         |
+| IPsum                  | `ipv4`                  | IPs with report counts (added as tags)                                                      |
 
 ## Enrichment Sources
 
@@ -221,7 +222,8 @@ Queried IOCs are enriched using these external APIs:
 *   [ ] Unit/integration tests.
 *   [ ] Potential Web UI (Streamlit).
 
-## Contributing
+## Contributing and Requests
 
-<!-- Optional: Add guidelines -->
-<!-- Contributions are welcome! Please feel free to submit a Pull Request or open an Issue. -->
+If you have request for any feature or anything else - Please drop me an email or message or just open an issue. I will be happy to do whatever I can.
+
+All Contributions are welcome! Please feel free to submit a Pull Request or open an Issue.
