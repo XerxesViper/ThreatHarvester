@@ -1,4 +1,3 @@
-
 # Intel Harvester
 
 [![License](https://img.shields.io/badge/license-The_Unlicense-red.svg)](https://unlicense.org/)
@@ -6,7 +5,8 @@
 
 A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOCs) from various OSINT feeds, store them locally, and enrich queried indicators using external threat intelligence APIs.
 
-**GIF HERE**
+![Threat Harvester Demo](https://codeberg.org/XerxesViper/Threat_Intel_Feed_Correlator/raw/branch/main/Media/ThreatHarvester_example_CLI.gif)
+
 
 ## Features
 
