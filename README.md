@@ -1,8 +1,16 @@
 # Intel Harvester
 
 [![License](https://img.shields.io/badge/license-The_Unlicense-red.svg)](https://unlicense.org/)
+```
+___________.__                               __     ___ ___                                           __                   
+\__    ___/|  |__  _______   ____  _____   _/  |_  /   |   \ _____   _______ ___  __  ____    _______/  |_   ____  _______ 
+  |    |   |  |  \ \_  __ \_/ __ \ \__  \  \   __\/    ~    \\__  \  \_  __ \\  \/ /_/ __ \  /  ___/\   __\_/ __ \ \_  __ \
+  |    |   |   Y  \ |  | \/\  ___/  / __ \_ |  |  \    Y    / / __ \_ |  | \/ \   / \  ___/  \___ \  |  |  \  ___/  |  | \/
+  |____|   |___|  / |__|    \___  >(____  / |__|   \___|_  / (____  / |__|     \_/   \___  >/____  > |__|   \___  > |__|   
+                \/              \/      \/               \/       \/                     \/      \/             \/
+                                 ThreatHarvester V1.0 - XerxesViper
 
-
+```
 A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOCs) from various OSINT feeds, store them locally, and enrich queried indicators using external threat intelligence APIs.
 
 ![Threat Harvester Demo](https://codeberg.org/XerxesViper/Threat_Intel_Feed_Correlator/raw/branch/main/Media/ThreatHarvester_example_CLI.gif)
