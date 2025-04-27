@@ -36,9 +36,11 @@ A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOC
 
 <!-- Placeholder: Add screenshots here -->
 **IP Query Demo:**
+
 ![IP Query Demo](https://codeberg.org/XerxesViper/Threat_Intel_Feed_Correlator/raw/branch/main/Media/IPEnrichmentExample.gif)
 
 **Hash Query Output:**
+
 ![IP Query Demo](https://codeberg.org/XerxesViper/Threat_Intel_Feed_Correlator/raw/branch/main/Media/HashQueryDemo.gif)
 
 <!-- ![Example Hash Query](placeholder_hash_query.png) -->
