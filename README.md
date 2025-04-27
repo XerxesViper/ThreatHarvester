@@ -43,14 +43,6 @@ A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOC
 
 ![IP Query Demo](https://codeberg.org/XerxesViper/Threat_Intel_Feed_Correlator/raw/branch/main/Media/HashQueryDemo.gif)
 
-<!-- ![Example Hash Query](placeholder_hash_query.png) -->
-*Placeholder for Hash Query Screenshot*
-
-**CLI Demo (Optional):**
-
-<!-- Placeholder for asciinema or GIF -->
-*Placeholder for Demo*
-
 ## Technology Stack
 
 *   **Language:** Python 3.x
@@ -128,7 +120,7 @@ A command-line tool (Intel Harvester) to aggregate Indicators of Compromise (IOC
     python -m src.feed_handler 
     ```
     *   Schedule this script to run periodically (e.g., daily) to keep the database updated.
-    * * Else If you would like to download the database that has already been created - It can be downloaded using ....
+    *   Else If you would like to download the database that has already been created - It can be downloaded from - 
 
 ## Usage
 
