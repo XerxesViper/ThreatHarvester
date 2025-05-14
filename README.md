@@ -13,7 +13,7 @@ ___________.__                               __     ___ ___                     
 ```
 A command-line tool to aggregate Indicators of Compromise (IOCs) from various OSINT feeds, store them locally, and enrich queried indicators using external threat intelligence APIs.
 
-![Threat Harvester Demo](https://codeberg.org/XerxesViper/Threat_Intel_Feed_Correlator/raw/branch/main/Media/ThreatHarvester_example_CLI.gif)
+![Threat Harvester Demo](https://github.com/XerxesViper/ThreatHarvester/blob/01941ef5593f2aa39dba14cd59fa7e9c4d6c770c/Media/ThreatHarvester_example_CLI.gif)
 
 
 ## Features
